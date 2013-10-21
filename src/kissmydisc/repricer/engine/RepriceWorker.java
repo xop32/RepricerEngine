@@ -1,6 +1,7 @@
 package kissmydisc.repricer.engine;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Hashtable;
@@ -32,6 +33,7 @@ import kissmydisc.repricer.model.RepriceReport;
 import kissmydisc.repricer.model.RepricerConfiguration;
 import kissmydisc.repricer.model.RepricerFormula;
 import kissmydisc.repricer.model.RepricerStatus;
+import kissmydisc.repricer.model.RepricerStatus.METRIC;
 import kissmydisc.repricer.utils.AppConfig;
 import kissmydisc.repricer.utils.Pair;
 
@@ -223,9 +225,19 @@ public class RepriceWorker implements Runnable {
             moreToken = itemsAndMoreToken.getSecond();
             log.debug("Repricer " + region + " got " + itemsAndMoreToken.getFirst().size() + " to process, moreToken: "
                     + moreToken);
+            String last = null;
             if (items != null) {
-                List<InventoryFeedItem> toProcessCached = new ArrayList<InventoryFeedItem>();
-                List<InventoryFeedItem> toProcessAndCache = new ArrayList<InventoryFeedItem>();
+                for (InventoryFeedItem item : items) {
+                    last = item.getProductId();
+                }
+                if (moreToken == null) {
+                    last = null;
+                }
+                Map<Integer, Map<String, List<InventoryFeedItem>>> productBatch = new HashMap<Integer, Map<String, List<InventoryFeedItem>>>();
+                Map<String, Integer> productBatchId = new HashMap<String, Integer>();
+                int batchId = 1;
+                Map<String, List<InventoryFeedItem>> toProcessCached = new HashMap<String, List<InventoryFeedItem>>();
+                Map<String, List<InventoryFeedItem>> toProcessAndCache = new HashMap<String, List<InventoryFeedItem>>();
                 for (int i = 0; i < items.size(); i += BATCH_SIZE) {
                     int toIndex = Math.min(i + BATCH_SIZE, items.size());
                     List<InventoryFeedItem> toProcess = items.subList(i, toIndex);
@@ -235,7 +247,7 @@ public class RepriceWorker implements Runnable {
                     }
                     Map<String, ProductDetails> details = new ProductDAO().getProductDetails(productIds);
                     for (InventoryFeedItem item : toProcess) {
-                        if (item.isValid()) {
+                        if (item.isValid() && item.getProductId().equals(last) == false) {
                             boolean shouldCache = true;
                             if (details != null && details.containsKey(item.getProductId())) {
                                 ProductDetails detail = details.get(item.getProductId());
@@ -247,36 +259,70 @@ public class RepriceWorker implements Runnable {
                                     }
                                 }
                             }
-                            List<InventoryFeedItem> toProcessTemp = null;
+                            Map<String, List<InventoryFeedItem>> toProcessTemp = Collections.emptyMap();
                             item.setItemNo(itemNo++);
-                            if (shouldCache) {
-                                toProcessAndCache.add(item);
+                            if (productBatchId.containsKey(item.getProductId())) {
+                                int batch = productBatchId.get(item.getProductId());
+                                productBatch.get(batch).get(item.getProductId()).add(item);
+                            } else if (shouldCache) {
+                                if (toProcessAndCache.containsKey(item.getProductId())) {
+                                    toProcessAndCache.get(item.getProductId()).add(item);
+                                } else {
+                                    List<InventoryFeedItem> tItems = new ArrayList<InventoryFeedItem>();
+                                    tItems.add(item);
+                                    toProcessAndCache.put(item.getProductId(), tItems);
+                                }
                                 toProcessTemp = toProcessAndCache;
                             } else {
-                                toProcessCached.add(item);
+                                if (toProcessCached.containsKey(item.getProductId())) {
+                                    toProcessCached.get(item.getProductId()).add(item);
+                                } else {
+                                    List<InventoryFeedItem> tItems = new ArrayList<InventoryFeedItem>();
+                                    tItems.add(item);
+                                    toProcessCached.put(item.getProductId(), tItems);
+                                }
                                 toProcessTemp = toProcessCached;
                             }
                             if (toProcessTemp.size() == BATCH_SIZE) {
-                                status.addScheduled(toProcessTemp.size());
-                                executor.execute(new WorkerThreadInternational(toProcessTemp, currentConfig,
-                                        feedManager));
-                                submittedTasks++;
+                                productBatch.put(batchId, toProcessTemp);
+                                for (String prdId : toProcessTemp.keySet()) {
+                                    productBatchId.put(prdId, batchId);
+                                }
+                                batchId++;
                                 if (shouldCache) {
-                                    toProcessAndCache = new ArrayList<InventoryFeedItem>();
+                                    toProcessAndCache = new HashMap<String, List<InventoryFeedItem>>();
                                 } else {
-                                    toProcessCached = new ArrayList<InventoryFeedItem>();
+                                    toProcessCached = new HashMap<String, List<InventoryFeedItem>>();
                                 }
                             }
                         }
                     }
                 }
+                for (Integer batch : productBatch.keySet()) {
+                    Map<String, List<InventoryFeedItem>> batchItems = productBatch.get(batch);
+                    int scheduled = 0;
+                    for (String prdId : batchItems.keySet()) {
+                        scheduled += batchItems.get(prdId).size();
+                    }
+                    status.addScheduled(scheduled);
+                    executor.execute(new WorkerThreadInternational(batchItems, currentConfig, feedManager));
+                    submittedTasks++;
+                }
                 if (toProcessCached != null && !toProcessCached.isEmpty()) {
-                    status.addScheduled(toProcessCached.size());
+                    int scheduled = 0;
+                    for (String prdId : toProcessCached.keySet()) {
+                        scheduled += toProcessCached.get(prdId).size();
+                    }
+                    status.addScheduled(scheduled);
                     executor.execute(new WorkerThreadInternational(toProcessCached, currentConfig, feedManager));
                     submittedTasks++;
                 }
                 if (toProcessAndCache != null && !toProcessAndCache.isEmpty()) {
-                    status.addScheduled(toProcessAndCache.size());
+                    int scheduled = 0;
+                    for (String prdId : toProcessAndCache.keySet()) {
+                        scheduled += toProcessAndCache.get(prdId).size();
+                    }
+                    status.addScheduled(scheduled);
                     executor.execute(new WorkerThreadInternational(toProcessAndCache, currentConfig, feedManager));
                     submittedTasks++;
                 }
@@ -347,9 +393,66 @@ public class RepriceWorker implements Runnable {
         return report;
     }
 
+    private class RepriceActivity {
+        private InventoryFeedItem item;
+        private PriceQuantityFeed feed;
+        private StringBuffer auditTrail;
+        private METRIC metric;
+        private int formulaId;
+        private boolean isLowestPrice;
+
+        public InventoryFeedItem getItem() {
+            return item;
+        }
+
+        public void setItem(InventoryFeedItem item) {
+            this.item = item;
+        }
+
+        public PriceQuantityFeed getFeed() {
+            return feed;
+        }
+
+        public void setFeed(PriceQuantityFeed feed) {
+            this.feed = feed;
+        }
+
+        public StringBuffer getAuditTrail() {
+            return auditTrail;
+        }
+
+        public void setAuditTrail(StringBuffer auditTrail) {
+            this.auditTrail = auditTrail;
+        }
+
+        public METRIC getMetric() {
+            return metric;
+        }
+
+        public void setMetric(METRIC metric) {
+            this.metric = metric;
+        }
+
+        public int getFormulaId() {
+            return formulaId;
+        }
+
+        public void setFormulaId(int formulaId) {
+            this.formulaId = formulaId;
+        }
+
+        public void setIsLowestPrice(boolean lowestPrice) {
+            this.isLowestPrice = isLowestPrice;
+        }
+
+        public boolean getIsLowestPrice() {
+            return this.isLowestPrice;
+        }
+    }
+
     private class WorkerThreadInternational implements Runnable {
 
-        private List<InventoryFeedItem> items;
+        private Map<String, List<InventoryFeedItem>> items;
 
         private RepricerConfiguration config;
 
@@ -357,8 +460,8 @@ public class RepriceWorker implements Runnable {
 
         private int index;
 
-        public WorkerThreadInternational(final List<InventoryFeedItem> items, final RepricerConfiguration config,
-                final RepriceFeedManager feedManager) {
+        public WorkerThreadInternational(final Map<String, List<InventoryFeedItem>> items,
+                final RepricerConfiguration config, final RepriceFeedManager feedManager) {
             this.items = items;
             this.config = config;
             this.feedManager = feedManager;
@@ -369,305 +472,348 @@ public class RepriceWorker implements Runnable {
 
             ExternalDataManager dataManager = null;
 
+            List<InventoryFeedItem> inventoryItems = new ArrayList<InventoryFeedItem>();
+            for (String productId : items.keySet()) {
+                inventoryItems.addAll(items.get(productId));
+            }
+
             if (this.config.getRegion().equals("KMD")) {
-                dataManager = new ExternalDataManager(this.items, this.config.getCacheRefreshTime(), jpAccessor,
+                dataManager = new ExternalDataManager(inventoryItems, this.config.getCacheRefreshTime(), jpAccessor,
                         amazonAccessorMap, exchangeRates);
             } else {
-                dataManager = new ExternalDataManager(this.items, this.config.getCacheRefreshTime(), jpAccessor,
+                dataManager = new ExternalDataManager(inventoryItems, this.config.getCacheRefreshTime(), jpAccessor,
                         amazonAccessor);
             }
 
             try {
-
                 List<RepriceReport> reports = new ArrayList<RepriceReport>();
-
-                for (InventoryFeedItem item : items) {
-                    StringBuffer auditTrail = new StringBuffer();
-                    PriceQuantityFeed feed = new PriceQuantityFeed(item.getRegion());
-                    feed.setSku(item.getSku());
-                    boolean reprice = true;
-                    double price = (double) item.getPrice();
-                    int quantity = item.getQuantity();
-                    auditTrail.append("P:" + item.getPrice() + ", Q:" + quantity + "\n");
-                    // Quantity Filter
-
-                    // Quantity Filter
-                    index++;
-                    boolean quantityReset = false;
-                    boolean priceDown = false;
-                    boolean priceUp = false;
-                    boolean lowestPrice = false;
-                    boolean blackList = false;
-                    boolean noPriceChange = false;
-
-                    try {
-                        if (reprice && dataManager.isBlacklist(item.getSku())) {
-                            reprice = false;
-                            blackList = true;
-                            auditTrail.append("Blacklisted.");
+                for (String productId : items.keySet()) {
+                    Map<String, RepriceActivity> repriceActivityMap = new HashMap<String, RepriceActivity>();
+                    List<InventoryFeedItem> inventoryItemsForProduct = items.get(productId);
+                    for (InventoryFeedItem item : inventoryItemsForProduct) {
+                        RepriceActivity activity = new RepriceActivity();
+                        activity.setItem(item);
+                        if (item.isNew()) {
+                            repriceActivityMap.put("NEW", activity);
+                        } else if (item.isOBI()) {
+                            repriceActivityMap.put(item.getSku(), activity);
+                        } else if (item.isUsed()) {
+                            repriceActivityMap.put(item.getSku(), activity);
                         }
+                        StringBuffer auditTrail = new StringBuffer();
+                        PriceQuantityFeed feed = new PriceQuantityFeed(item.getRegion());
+                        feed.setSku(item.getSku());
+                        boolean reprice = true;
+                        double price = (double) item.getPrice();
+                        int quantity = item.getQuantity();
+                        auditTrail.append("P:" + item.getPrice() + ", Q:" + quantity + "\n");
+                        // Quantity Filter
 
-                        int ajpQuantity = dataManager.getQuantity(item.getSku());
-                        double currentPrice = item.getPrice();
-                        int currentQuantity = item.getQuantity();
+                        // Quantity Filter
+                        index++;
+                        boolean quantityReset = false;
+                        boolean priceDown = false;
+                        boolean priceUp = false;
+                        boolean lowestPrice = false;
+                        boolean blackList = false;
+                        boolean noPriceChange = false;
 
-                        int qtyLimit = config.getFormula().getQuantityLimit();
-                        if (item.getObiItem()) {
-                            qtyLimit = config.getFormula().getObiQuantityLimit();
-                        }
-                        if (item.getCondition() == 11) {
-                            qtyLimit = config.getFormula().getNewQuantityLimit();
-                        }
-
-                        if (reprice && ajpQuantity >= 0 && ajpQuantity < qtyLimit) {
-                            reprice = false;
-                            quantity = 0;
-                            quantityReset = true;
-                            if ("KMD".equals(region)) {
-                                if (ajpQuantity == 0) {
-                                    price = 22.22F;
-                                }
-                            }
-                            auditTrail.append("Applying Quantity Filter - Ajp Q:" + ajpQuantity + ", Not Repricing.");
-                            if (log.isDebugEnabled()) {
-                                log.debug("Applying quantity filter for " + item);
-                            }
-                        } else if (!item.getRegion().equals("JP") && reprice && ajpQuantity >= qtyLimit
-                                && currentQuantity == 0) {
-                            quantity = 1;
-                        }
-
-                        if (reprice) {
-                            if (log.isDebugEnabled()) {
-                                log.debug("Repricing " + item);
-                            }
-                            String formula = (item.getObiItem() ? config.getFormula().getObiFormula() : config
-                                    .getFormula().getInitialFormula());
-                            Float lowestAmazonPrice = dataManager.getLowestAmazonPrice(item.getSku());
-                            Float weight = dataManager.getWeight(item.getSku());
-                            if (weight == null || weight <= 0F) {
-                                if (log.isDebugEnabled()) {
-                                    log.debug("Weight is empty, using default weight for " + item.getSku());
-                                }
-                                weight = (float) (item.getObiItem() ? config.getFormula().getDefaultObiWeight()
-                                        : config.getFormula().getDefaultWeight());
-                            }
-                            if (log.isDebugEnabled()) {
-                                log.debug("SKU: " + item.getSku() + ", Region: " + item.getRegion()
-                                        + ", Formula used: " + formula + ", LAP: " + lowestAmazonPrice + ", WGT: "
-                                        + weight);
-                            }
-                            Calculable expression;
-                            String error = "";
-                            try {
-                                de.congrace.exp4j.ExpressionBuilder builder = new de.congrace.exp4j.ExpressionBuilder(
-                                        formula);
-                                if (lowestAmazonPrice != null && lowestAmazonPrice > 0F) {
-                                    builder.withVariable("LAP", lowestAmazonPrice);
-                                    auditTrail.append("LAP:" + lowestAmazonPrice + "\n");
-                                } else {
-                                    auditTrail.append("LAP unavailable.");
-                                    error += "LAP unavailable,";
-                                }
-                                if (weight != null && weight >= 0F) {
-                                    builder.withVariable("WGT", weight);
-                                    auditTrail.append("WGT:" + weight + "\n");
-                                } else {
-                                    auditTrail.append("WGT unavailable.");
-                                    error += "WGT unavailable";
-                                }
-                                expression = builder.build();
-                                price = expression.calculate();
-                                auditTrail.append("MyPrice:" + price + "\n");
-                                if (currentPrice < price) {
-                                    priceUp = true;
-                                } else if (currentPrice > price) {
-                                    priceDown = true;
-                                } else {
-                                    if (log.isDebugEnabled()) {
-                                        log.debug("Calculated price and existing prices are the same for SKU: "
-                                                + item.getSku() + ", Region: " + item.getRegion());
-                                    }
-                                    noPriceChange = true;
-                                }
-                            } catch (Exception e) {
-                                log.error("Unable to evaluate the expression " + formula + " for SKU: " + item.getSku()
-                                        + ", Region: " + item.getRegion() + ", ErrorString=" + error, e);
+                        try {
+                            if (reprice && dataManager.isBlacklist(item.getSku())) {
                                 reprice = false;
-                                noPriceChange = true;
-                                price = item.getPrice();
-                                quantity = item.getQuantity();
-                                auditTrail.append("Not repricing.");
+                                blackList = true;
+                                auditTrail.append("Blacklisted.");
                             }
 
-                            // Second level repricing..
-                            if (reprice && !item.getObiItem() && config.getFormula().isSecondLevelRepricing()) {
-                                Float lowestRegionalPrice = dataManager.getLowestRegionalPrice(item.getSku());
-                                if (lowestRegionalPrice != null && lowestRegionalPrice > 0) {
-                                    RepricerFormula f = config.getFormula();
-                                    if (price < lowestRegionalPrice) {
-                                        double upperLimit = f.getSecondLevelRepricingUpperLimit();
-                                        double upperLimitPercent = f.getSecondLevelRepricingUpperLimitPercent();
-                                        double diff = Math.min(price * upperLimitPercent / 100, upperLimit);
-                                        auditTrail.append("UL:" + diff + ",");
-                                        price = Math.min(price + diff, lowestRegionalPrice - f.getLowerPriceMarigin());
-                                        auditTrail.append("Price after second level repricing: " + price
-                                                + ", LowestPrice: " + lowestRegionalPrice + "\nUp\n");
-                                    } else {
-                                        double lowerLimit = f.getSecondLevelRepricingLowerLimit();
-                                        double lowerLimitPercent = f.getSecondLevelRepricingLowerLimitPercent();
-                                        double diff = Math.min(price * lowerLimitPercent / 100, lowerLimit);
-                                        auditTrail.append("LL:" + diff + ",");
-                                        price = Math.max(price - diff, lowestRegionalPrice - f.getLowerPriceMarigin());
-                                        auditTrail.append("Price after second level repricing: " + price
-                                                + ", LowestPrice: " + lowestRegionalPrice + "\nPrice Down\n");
-                                    }
-                                    if (currentPrice < price) {
-                                        noPriceChange = false;
-                                        priceUp = true;
-                                        priceDown = false;
-                                    } else if (currentPrice > price) {
-                                        noPriceChange = false;
-                                        priceDown = true;
-                                        priceUp = false;
-                                    } else {
-                                        noPriceChange = true;
-                                        priceUp = false;
-                                        priceDown = false;
-                                    }
-                                    if (lowestRegionalPrice > price) {
-                                        lowestPrice = true;
-                                    }
-                                } else {
-                                    if (lowestRegionalPrice != null && lowestRegionalPrice < 0) {
-                                        RepricerFormula f = config.getFormula();
-                                        double upperLimit = f.getSecondLevelRepricingUpperLimit();
-                                        double upperLimitPercent = f.getSecondLevelRepricingUpperLimitPercent();
-                                        double diff = Math.min(price * upperLimitPercent / 100, upperLimit);
-                                        auditTrail.append("UL:" + diff + ",");
-                                        price = price + diff;
-                                        auditTrail
-                                                .append("Price after applying upper limit: " + price + "\nPrice Up\n");
-                                    } else {
-                                        auditTrail.append(item.getRegion()
-                                                + " price not available. Skipping second level repricing");
+                            int ajpQuantity = dataManager.getQuantity(item.getSku());
+                            double currentPrice = item.getPrice();
+                            int currentQuantity = item.getQuantity();
+
+                            int qtyLimit = config.getFormula().getQuantityLimit();
+                            if (item.getObiItem()) {
+                                qtyLimit = config.getFormula().getObiQuantityLimit();
+                            }
+                            if (item.getCondition() == 11) {
+                                qtyLimit = config.getFormula().getNewQuantityLimit();
+                            }
+
+                            if (reprice && ajpQuantity >= 0 && ajpQuantity < qtyLimit) {
+                                reprice = false;
+                                quantity = 0;
+                                quantityReset = true;
+                                if ("KMD".equals(region)) {
+                                    if (ajpQuantity == 0) {
+                                        price = 22.22F;
                                     }
                                 }
+                                auditTrail.append("Applying Quantity Filter - Ajp Q:" + ajpQuantity
+                                        + ", Not Repricing.");
+                                if (log.isDebugEnabled()) {
+                                    log.debug("Applying quantity filter for " + item);
+                                }
+                            } else if (!item.getRegion().equals("JP") && reprice && ajpQuantity >= qtyLimit
+                                    && currentQuantity == 0) {
+                                quantity = 1;
                             }
 
                             if (reprice) {
-                                int upperLimitPrice = -1;
-                                if (item.isNew()) {
-                                    upperLimitPrice = this.config.getFormula().getPriceLimitNew();
-                                } else if (item.isUsed()) {
-                                    upperLimitPrice = this.config.getFormula().getPriceLimitUsed();
-                                } else if (item.isOBI()) {
-                                    upperLimitPrice = this.config.getFormula().getPriceLimitUsedOBI();
+                                auditTrail.append("Q(A.jp): ").append(ajpQuantity + "\n");
+                                if (log.isDebugEnabled()) {
+                                    log.debug("Repricing " + item);
                                 }
-                                if (upperLimitPrice > 0 && price > upperLimitPrice) {
-                                    quantity = 0;
-                                    if (region.equals("KMD")) {
-                                        price = 22.22F;
+                                String formula = (item.getObiItem() ? config.getFormula().getObiFormula() : config
+                                        .getFormula().getInitialFormula());
+                                Float lowestAmazonPrice = dataManager.getLowestAmazonPrice(item.getSku());
+                                Float weight = dataManager.getWeight(item.getSku());
+                                if (weight == null || weight <= 0F) {
+                                    if (log.isDebugEnabled()) {
+                                        log.debug("Weight is empty, using default weight for " + item.getSku());
                                     }
-                                    quantityReset = true;
-                                    auditTrail.append("\nP > " + upperLimitPrice + ", set Q = 0.");
+                                    weight = (float) (item.getObiItem() ? config.getFormula().getDefaultObiWeight()
+                                            : config.getFormula().getDefaultWeight());
                                 }
-                            }
+                                if (log.isDebugEnabled()) {
+                                    log.debug("SKU: " + item.getSku() + ", Region: " + item.getRegion()
+                                            + ", Formula used: " + formula + ", LAP: " + lowestAmazonPrice + ", WGT: "
+                                            + weight);
+                                }
+                                Calculable expression;
+                                String error = "";
+                                try {
+                                    de.congrace.exp4j.ExpressionBuilder builder = new de.congrace.exp4j.ExpressionBuilder(
+                                            formula);
+                                    if (lowestAmazonPrice != null && lowestAmazonPrice > 0F) {
+                                        builder.withVariable("LAP", lowestAmazonPrice);
+                                        auditTrail.append("LAP:" + lowestAmazonPrice + "\n");
+                                    } else {
+                                        auditTrail.append("LAP unavailable.");
+                                        error += "LAP unavailable,";
+                                    }
+                                    if (weight != null && weight >= 0F) {
+                                        builder.withVariable("WGT", weight);
+                                        auditTrail.append("WGT:" + weight + "\n");
+                                    } else {
+                                        auditTrail.append("WGT unavailable.");
+                                        error += "WGT unavailable";
+                                    }
+                                    expression = builder.build();
+                                    price = expression.calculate();
+                                    auditTrail.append("MyPrice:" + price + "\n");
+                                    if (currentPrice < price) {
+                                        priceUp = true;
+                                    } else if (currentPrice > price) {
+                                        priceDown = true;
+                                    } else {
+                                        if (log.isDebugEnabled()) {
+                                            log.debug("Calculated price and existing prices are the same for SKU: "
+                                                    + item.getSku() + ", Region: " + item.getRegion());
+                                        }
+                                        noPriceChange = true;
+                                    }
+                                } catch (Exception e) {
+                                    log.error(
+                                            "Unable to evaluate the expression " + formula + " for SKU: "
+                                                    + item.getSku() + ", Region: " + item.getRegion()
+                                                    + ", ErrorString=" + error, e);
+                                    reprice = false;
+                                    noPriceChange = true;
+                                    price = item.getPrice();
+                                    quantity = item.getQuantity();
+                                    auditTrail.append("Not repricing.");
+                                }
 
-                            feed.setPrice((float) price);
-                            feed.setQuantity(quantity);
-                            if (log.isDebugEnabled()) {
-                                log.debug(feed);
-                            }
-                            reports.add(toRepriceReport(item.getInventoryItemId(), this.config.getFormula()
-                                    .getFormulaId(), feed, auditTrail));
-                            RepricerStatus.METRIC metric = RepricerStatus.METRIC.SAME_PRICE;
-                            if (item.getObiItem()) {
-                                metric = RepricerStatus.METRIC.OBI_SAME_PRICE;
-                            }
-                            if (quantityReset) {
-                                if (!item.getObiItem()) {
-                                    metric = RepricerStatus.METRIC.QUANTITY_RESET_TO_ZERO;
-                                } else {
-                                    metric = RepricerStatus.METRIC.OBI_QUANTITY_RESET_TO_ZERO;
+                                // Second level repricing..
+                                if (reprice && !item.getObiItem() && config.getFormula().isSecondLevelRepricing()) {
+                                    Float lowestRegionalPrice = dataManager.getLowestRegionalPrice(item.getSku());
+                                    if (lowestRegionalPrice != null && lowestRegionalPrice > 0) {
+                                        RepricerFormula f = config.getFormula();
+                                        if (price < lowestRegionalPrice) {
+                                            double upperLimit = f.getSecondLevelRepricingUpperLimit();
+                                            double upperLimitPercent = f.getSecondLevelRepricingUpperLimitPercent();
+                                            double diff = Math.min(price * upperLimitPercent / 100, upperLimit);
+                                            auditTrail.append("UL:" + diff + ",");
+                                            price = Math.min(price + diff,
+                                                    lowestRegionalPrice - f.getLowerPriceMarigin());
+                                            auditTrail.append("P(II Level): " + price + ", LowestPrice: "
+                                                    + lowestRegionalPrice + "\nUp\n");
+                                        } else {
+                                            double lowerLimit = f.getSecondLevelRepricingLowerLimit();
+                                            double lowerLimitPercent = f.getSecondLevelRepricingLowerLimitPercent();
+                                            double diff = Math.min(price * lowerLimitPercent / 100, lowerLimit);
+                                            auditTrail.append("LL:" + diff + ",");
+                                            price = Math.max(price - diff,
+                                                    lowestRegionalPrice - f.getLowerPriceMarigin());
+                                            auditTrail.append("P(II level): " + price + ", LowestPrice: "
+                                                    + lowestRegionalPrice + "\nPrice Down\n");
+                                        }
+                                        if (currentPrice < price) {
+                                            noPriceChange = false;
+                                            priceUp = true;
+                                            priceDown = false;
+                                        } else if (currentPrice > price) {
+                                            noPriceChange = false;
+                                            priceDown = true;
+                                            priceUp = false;
+                                        } else {
+                                            noPriceChange = true;
+                                            priceUp = false;
+                                            priceDown = false;
+                                        }
+                                        if (lowestRegionalPrice > price) {
+                                            lowestPrice = true;
+                                        }
+                                    } else {
+                                        if (lowestRegionalPrice != null && lowestRegionalPrice < 0) {
+                                            RepricerFormula f = config.getFormula();
+                                            double upperLimit = f.getSecondLevelRepricingUpperLimit();
+                                            double upperLimitPercent = f.getSecondLevelRepricingUpperLimitPercent();
+                                            double diff = Math.min(price * upperLimitPercent / 100, upperLimit);
+                                            auditTrail.append("UL:" + diff + ",");
+                                            price = price + diff;
+                                            auditTrail.append("P(upper limit): " + price + "\nPrice Up\n");
+                                        } else {
+                                            auditTrail.append(item.getRegion()
+                                                    + " price not available. Skipping Level-2");
+                                        }
+                                    }
                                 }
-                            } else if (priceUp) {
-                                if (!item.getObiItem()) {
-                                    metric = RepricerStatus.METRIC.PRICE_UP;
-                                } else {
-                                    metric = RepricerStatus.METRIC.OBI_PRICE_UP;
+
+                                if (reprice) {
+                                    int upperLimitPrice = -1;
+                                    if (item.isNew()) {
+                                        upperLimitPrice = this.config.getFormula().getPriceLimitNew();
+                                    } else if (item.isUsed()) {
+                                        upperLimitPrice = this.config.getFormula().getPriceLimitUsed();
+                                    } else if (item.isOBI()) {
+                                        upperLimitPrice = this.config.getFormula().getPriceLimitUsedOBI();
+                                    }
+                                    if (upperLimitPrice > 0 && price > upperLimitPrice) {
+                                        quantity = 0;
+                                        if (region.equals("KMD")) {
+                                            price = 22.22F;
+                                        }
+                                        quantityReset = true;
+                                        auditTrail.append("\nP > " + upperLimitPrice + ", set Q = 0.");
+                                    }
                                 }
-                            } else if (priceDown) {
-                                if (!item.getObiItem()) {
-                                    metric = RepricerStatus.METRIC.PRICE_DOWN;
-                                } else {
-                                    metric = RepricerStatus.METRIC.OBI_PRICE_DOWN;
+
+                                feed.setPrice((float) price);
+                                feed.setQuantity(quantity);
+                                activity.setFeed(feed);
+                                if (log.isDebugEnabled()) {
+                                    log.debug(feed);
                                 }
+                                RepricerStatus.METRIC metric = RepricerStatus.METRIC.SAME_PRICE;
+                                if (item.getObiItem()) {
+                                    metric = RepricerStatus.METRIC.OBI_SAME_PRICE;
+                                }
+                                if (quantityReset) {
+                                    if (!item.getObiItem()) {
+                                        metric = RepricerStatus.METRIC.QUANTITY_RESET_TO_ZERO;
+                                    } else {
+                                        metric = RepricerStatus.METRIC.OBI_QUANTITY_RESET_TO_ZERO;
+                                    }
+                                } else if (priceUp) {
+                                    if (!item.getObiItem()) {
+                                        metric = RepricerStatus.METRIC.PRICE_UP;
+                                    } else {
+                                        metric = RepricerStatus.METRIC.OBI_PRICE_UP;
+                                    }
+                                } else if (priceDown) {
+                                    if (!item.getObiItem()) {
+                                        metric = RepricerStatus.METRIC.PRICE_DOWN;
+                                    } else {
+                                        metric = RepricerStatus.METRIC.OBI_PRICE_DOWN;
+                                    }
+                                }
+                                activity.setAuditTrail(auditTrail);
+                                activity.setMetric(metric);
+                                activity.setIsLowestPrice(lowestPrice);
+                            } else {
+                                feed.setQuantity(quantity);
+                                feed.setPrice((float) price);
+                                activity.setFeed(feed);
+                                if (log.isDebugEnabled()) {
+                                    log.debug(feed);
+                                }
+                                activity.setFormulaId(this.config.getFormula().getFormulaId());
+                                activity.setAuditTrail(auditTrail);
+                                RepricerStatus.METRIC metric = RepricerStatus.METRIC.SAME_PRICE;
+                                if (item.getObiItem()) {
+                                    metric = RepricerStatus.METRIC.OBI_SAME_PRICE;
+                                }
+                                if (quantityReset) {
+                                    if (!item.getObiItem()) {
+                                        metric = RepricerStatus.METRIC.QUANTITY_RESET_TO_ZERO;
+                                    } else {
+                                        metric = RepricerStatus.METRIC.OBI_QUANTITY_RESET_TO_ZERO;
+                                    }
+                                } else if (priceUp) {
+                                    if (!item.getObiItem()) {
+                                        metric = RepricerStatus.METRIC.PRICE_UP;
+                                    } else {
+                                        metric = RepricerStatus.METRIC.OBI_PRICE_UP;
+                                    }
+                                } else if (priceDown) {
+                                    if (!item.getObiItem()) {
+                                        metric = RepricerStatus.METRIC.PRICE_DOWN;
+                                    } else {
+                                        metric = RepricerStatus.METRIC.OBI_PRICE_DOWN;
+                                    }
+                                }
+                                activity.setMetric(metric);
+                                activity.setIsLowestPrice(lowestPrice);
+                                // status.addRepriceMetrics(item.getRegionProductId(),
+                                // index, metric, lowestPrice);
                             }
-                            try {
-                                if (!noPriceChange) {
-                                    feedManager.writeToFeedFile(feed);
-                                }
-                            } catch (Exception e) {
-                                log.error("Error writing data to Amazon.", e);
-                            }
-                            status.addRepriceMetrics(item.getRegionProductId(), item.getItemNo(), metric, lowestPrice);
-                        } else {
-                            feed.setQuantity(quantity);
-                            feed.setPrice((float) price);
-                            if (log.isDebugEnabled()) {
-                                log.debug(feed);
-                            }
-                            reports.add(toRepriceReport(item.getInventoryItemId(), this.config.getFormula()
-                                    .getFormulaId(), feed, auditTrail));
-                            RepricerStatus.METRIC metric = RepricerStatus.METRIC.SAME_PRICE;
-                            if (item.getObiItem()) {
-                                metric = RepricerStatus.METRIC.OBI_SAME_PRICE;
-                            }
-                            if (quantityReset) {
-                                if (!item.getObiItem()) {
-                                    metric = RepricerStatus.METRIC.QUANTITY_RESET_TO_ZERO;
-                                } else {
-                                    metric = RepricerStatus.METRIC.OBI_QUANTITY_RESET_TO_ZERO;
-                                }
-                            } else if (priceUp) {
-                                if (!item.getObiItem()) {
-                                    metric = RepricerStatus.METRIC.PRICE_UP;
-                                } else {
-                                    metric = RepricerStatus.METRIC.OBI_PRICE_UP;
-                                }
-                            } else if (priceDown) {
-                                if (!item.getObiItem()) {
-                                    metric = RepricerStatus.METRIC.PRICE_DOWN;
-                                } else {
-                                    metric = RepricerStatus.METRIC.OBI_PRICE_DOWN;
-                                }
-                            }
-                            try {
-                                if (!metric.equals(RepricerStatus.METRIC.SAME_PRICE)) {
-                                    feedManager.writeToFeedFile(feed);
-                                }
-                            } catch (Exception e) {
-                                log.error("Error writing data to Amazon.", e);
-                            }
-                            status.addRepriceMetrics(item.getRegionProductId(), index, metric, lowestPrice);
+                        } catch (Exception e) {
+                            log.error("Error while repricing the item.", e);
                         }
-                        if (quantity >= 0 && price > 0) {
-                            InventoryItemDAO dao = new InventoryItemDAO();
-                            dao.updatePriceAndQuantity(item.getInventoryItemId(), price, quantity, currentPrice,
-                                    currentQuantity);
-                        }
-                    } catch (Exception e) {
-                        log.error("Error while repricing the item.", e);
                     }
-                    status.addOneCompleted();
+                    for (String condition : repriceActivityMap.keySet()) {
+                        RepriceActivity currentActivity = repriceActivityMap.get(condition);
+                        InventoryFeedItem item = currentActivity.getItem();
+                        if (item.isUsed() || item.isOBI()) {
+                            if (repriceActivityMap.containsKey("NEW")) {
+                                RepriceActivity forNEW = repriceActivityMap.get("NEW");
+                                if (forNEW.getFeed().getQuantity() > 0
+                                        && forNEW.getFeed().getPrice() < currentActivity.getFeed().getPrice()) {
+                                    currentActivity.getFeed().setQuantity(0);
+                                    if (item.isUsed()) {
+                                        currentActivity.setMetric(METRIC.QUANTITY_RESET_TO_ZERO);
+                                    } else {
+                                        currentActivity.setMetric(METRIC.OBI_QUANTITY_RESET_TO_ZERO);
+                                    }
+                                    currentActivity.auditTrail.append("Reset Q: 0, NP: ").append(
+                                            forNEW.getFeed().getPrice());
+                                    currentActivity.setIsLowestPrice(false);
+                                }
+                            }
+                        }
+                        try {
+                            feedManager.writeToFeedFile(currentActivity.getFeed());
+                        } catch (Exception e) {
+                            log.error("Error writing data to Amazon.", e);
+                        }
+                        reports.add(toRepriceReport(currentActivity.getItem().getInventoryItemId(),
+                                currentActivity.getFormulaId(), currentActivity.getFeed(),
+                                currentActivity.getAuditTrail()));
+                        status.addRepriceMetrics(item.getRegionProductId(), item.getItemNo(),
+                                currentActivity.getMetric(), currentActivity.getIsLowestPrice());
+                        PriceQuantityFeed feed = currentActivity.getFeed();
+                        if (feed.getQuantity() >= 0 && feed.getPrice() > 0) {
+                            InventoryItemDAO dao = new InventoryItemDAO();
+                            dao.updatePriceAndQuantity(item.getInventoryItemId(), feed.getPrice(), feed.getQuantity(),
+                                    item.getPrice(), item.getQuantity());
+                        }
+                        status.addOneCompleted();
+                    }
                 }
                 if (reports != null && reports.size() > 0) {
                     // Adding reprice reports
                     RepriceReportDAO dao = new RepriceReportDAO();
                     dao.addItems(reports);
                 }
-
             } catch (DBException e) {
                 log.error("Error getting required data from DB", e);
             }
