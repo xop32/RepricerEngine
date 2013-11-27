@@ -185,7 +185,11 @@ public class CreateListingsWorker {
             InventoryFeedItem item = new InventoryFeedItem();
             item.setInventoryId(newInventoryId);
             item.setObiItem(false);
-            item.setPrice(20000.0F);
+            if (region.equals("JP")) {
+                item.setPrice(20000.0F * 1000);
+            } else {
+                item.setPrice(20000.0F);
+            }
             item.setQuantity(0);
             item.setProductId(asin);
             item.setRegionProductId("N-" + region + "_" + asin);

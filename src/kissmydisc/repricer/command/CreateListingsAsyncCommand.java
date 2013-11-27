@@ -20,6 +20,7 @@ import kissmydisc.repricer.model.InventoryLoaderConfiguration;
 import kissmydisc.repricer.model.RepricerConfiguration;
 import kissmydisc.repricer.model.RepricerStatus;
 import kissmydisc.repricer.utils.AppConfig;
+import kissmydisc.repricer.utils.ItemNoteGenerator;
 import kissmydisc.repricer.utils.Pair;
 import kissmydisc.repricer.utils.PriceUtils;
 
@@ -164,16 +165,18 @@ public class CreateListingsAsyncCommand implements Runnable {
                     listing += item.getQuantity() + TAB;
                 }
                 if (param.equals("item-note")) {
+                    String itemNote = "";
                     if (item.getCondition() == 11) {
-                        listing += config.getItemNoteNew() + TAB;
+                        itemNote = ItemNoteGenerator.getItemNote(item.getProductId(), config.getItemNoteNew(), region);
                     }
                     if (item.getCondition() == 2) {
                         if (item.getObiItem()) {
-                            listing += config.getItemNoteObi() + TAB;
+                            itemNote = ItemNoteGenerator.getItemNote(item.getProductId(), config.getItemNoteObi(), region);
                         } else {
-                            listing += config.getItemNoteUsed() + TAB;
+                            itemNote = ItemNoteGenerator.getItemNote(item.getProductId(), config.getItemNoteUsed(), region);
                         }
                     }
+                    listing += itemNote + TAB;
                 }
                 if (param.equals("add-delete")) {
                     listing += "a" + TAB;

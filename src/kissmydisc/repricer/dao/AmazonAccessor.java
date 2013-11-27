@@ -1243,6 +1243,8 @@ public class AmazonAccessor {
                             ProductDetail detail = new ProductDetail();
                             detail.setProductId(asin);
                             for (Product p : p1.getProduct()) {
+                                log.info("MatchingProductDetailFor " + asin + ": "
+                                        + p.toXMLFragment().replaceAll("\n", ""));
                                 AttributeSetList l = p.getAttributeSets();
                                 for (Object o : l.getAny()) {
                                     Node n = (Node) o;

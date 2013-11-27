@@ -5,6 +5,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.Map;
 
 import kissmydisc.repricer.feeds.PriceQuantityFeed;
 import kissmydisc.repricer.model.ProductDetails;
@@ -45,4 +46,7 @@ public class KMDInventoryDAO extends KMDDBAccessor {
             releaseConnection();
         }
     }
+    
+    
 }
+
