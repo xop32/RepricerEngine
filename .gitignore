@@ -1,5 +1,14 @@
 *.class
 
+RepricerEngine/
+client.log
+bin/
+.classpath
+.keys
+.project
+.settings/
+logs/
+
 # Package Files #
 *.jar
 *.war
