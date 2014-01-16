@@ -691,6 +691,8 @@ public class RepriceWorker implements Runnable {
                                         quantity = 0;
                                         if (region.equals("KMD")) {
                                             price = 22.22F;
+                                        } else {
+                                            price = upperLimitPrice;
                                         }
                                         quantityReset = true;
                                         auditTrail.append("\nP > " + upperLimitPrice + ", set Q = 0.");

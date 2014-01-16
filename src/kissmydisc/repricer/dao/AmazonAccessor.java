@@ -106,7 +106,7 @@ public class AmazonAccessor {
     private static MarketplaceWebService getFeedsServiceClient(String region, Properties properties) {
         String accessKey = properties.getProperty(region + "_ACCESS_KEY");
         String secretKey = properties.getProperty(region + "_SECRET_KEY");
-        MarketplaceWebService service = new MarketplaceWebServiceClient(accessKey, secretKey, "SimplyReliableRepricer",
+        MarketplaceWebService service = new MarketplaceWebServiceClient(accessKey, secretKey, "SimplyReliableRepricer-" + region,
                 "1.0", getClientConfig(region));
         return service;
     }
@@ -138,7 +138,6 @@ public class AmazonAccessor {
         } else {
             return null;
         }
-
     }
 
     private static MarketplaceWebServiceProductsConfig getConfig(String region) {
@@ -1157,7 +1156,6 @@ public class AmazonAccessor {
         IdList list = new IdList(submissionIds);
         request.setFeedSubmissionIdList(list);
         GetFeedSubmissionListResponse response = feedsService.getFeedSubmissionList(request);
-        System.out.println(response.toJSON());
         if (response.isSetGetFeedSubmissionListResult()) {
             GetFeedSubmissionListResult result = response.getGetFeedSubmissionListResult();
             if (result.isSetFeedSubmissionInfoList()) {

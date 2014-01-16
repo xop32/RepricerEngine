@@ -2,9 +2,9 @@ package kissmydisc.repricer.utils;
 
 public class PriceUtils {
 
-    private static float round(float price) {
-        price = Math.round(price + 0.5F);
-        return price;
+    private static double round(float price) {
+        double price1 = Math.round((double) price + 0.5F);
+        return price1;
     }
 
     private static String truncateDecimal(String price) {
@@ -26,8 +26,7 @@ public class PriceUtils {
         if (price > 0.0) {
             String priceInStr = price + "";
             if (region.equals("JP")) {
-                price = round(price);
-                priceInStr = price + "";
+                priceInStr = round(price) + "";
                 int index = priceInStr.indexOf(".");
                 if (index == -1) {
                     index = priceInStr.length();

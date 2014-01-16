@@ -83,7 +83,7 @@ public class DBAccessor {
                     String database = AppConfig.getString("DatabaseName");
                     int port = AppConfig.getInteger("DatabasePort", 3306);
                     cpds.setJdbcUrl("jdbc:mysql://" + host + ":" + port + "/" + database
-                            + "?useServerPrepStmts=false&rewriteBatchedStatements=true");
+                            + "?useUnicode=true&characterEncoding=UTF-8&useServerPrepStmts=false&rewriteBatchedStatements=true");
                     cpds.setUser(AppConfig.getString("DatabaseUsername"));
                     cpds.setPassword(AppConfig.getString("DatabasePassword"));
                     cpds.setMaxPoolSize(10);

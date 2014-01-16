@@ -1,7 +1,10 @@
 package kissmydisc.repricer.command;
 
 import java.io.BufferedOutputStream;
+import java.io.BufferedWriter;
 import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.util.List;
 
 import org.apache.commons.logging.Log;
@@ -136,6 +139,12 @@ public class CreateListingsAsyncCommand implements Runnable {
         String NEWLINE = "\n";
         String previewFile = AppConfig.getString("PreviewFileLocation");
         previewFile += region;
+        String charset = "UTF-8";
+        if ("JP".equals(region)) {
+            charset = "Shift_JIS";
+        }
+        // Writer out = new BufferedWriter((new OutputStreamWriter(new
+        // FileOutputStream(previewFile), "UTF8")));
         BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(previewFile));
         String header = config.getHeader() + NEWLINE;
         bos.write(header.getBytes());
@@ -169,11 +178,13 @@ public class CreateListingsAsyncCommand implements Runnable {
                     if (item.getCondition() == 11) {
                         itemNote = ItemNoteGenerator.getItemNote(item.getProductId(), config.getItemNoteNew(), region);
                     }
-                    if (item.getCondition() == 2) {
+                    if (item.getCondition() < 11) {
                         if (item.getObiItem()) {
-                            itemNote = ItemNoteGenerator.getItemNote(item.getProductId(), config.getItemNoteObi(), region);
+                            itemNote = ItemNoteGenerator.getItemNote(item.getProductId(), config.getItemNoteObi(),
+                                    region);
                         } else {
-                            itemNote = ItemNoteGenerator.getItemNote(item.getProductId(), config.getItemNoteUsed(), region);
+                            itemNote = ItemNoteGenerator.getItemNote(item.getProductId(), config.getItemNoteUsed(),
+                                    region);
                         }
                     }
                     listing += itemNote + TAB;
@@ -202,7 +213,7 @@ public class CreateListingsAsyncCommand implements Runnable {
             }
             listing = listing.trim();
             listing += NEWLINE;
-            bos.write(listing.getBytes());
+            bos.write(listing.getBytes(charset));
         }
         bos.close();
     }

@@ -47,4 +47,5 @@ public class KMDProductionInventoryDAO extends KMDProductionDBAccessor {
             releaseConnection();
         }
     }
+    
 }

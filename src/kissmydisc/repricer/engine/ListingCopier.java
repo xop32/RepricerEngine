@@ -107,7 +107,7 @@ public class ListingCopier {
                         if (item.getCondition() == 11) {
                             sku = "N-MA-" + toRegion + id++;
                         }
-                        if (item.getCondition() == 2) {
+                        if (item.getCondition() < 11) {
                             if (item.getObiItem()) {
                                 sku = "O-MA-" + toRegion + id++;
                             } else {
@@ -231,6 +231,10 @@ public class ListingCopier {
             dos.flush();
             byteWritten += header.length;
         }
+        String charset = "UTF-8";
+        if (toRegion.equals("JP")) {
+            charset = "Shift_JIS";
+        }
         for (InventoryFeedItem item : items) {
             int parameter = 1;
             String listing = "";
@@ -251,7 +255,11 @@ public class ListingCopier {
                     listing += item.getCondition() + TAB;
                 }
                 if (param.equals("price")) {
-                    listing += PriceUtils.getPrice(item.getPrice(), toRegion) + TAB;
+                    float price = item.getPrice();
+                    if (toRegion.equals("JP") && item.getQuantity() == 0) {
+                        price = 97000.0F; // logic should be revisited
+                    }
+                    listing += PriceUtils.getPrice(price, toRegion) + TAB;
                 }
                 if (param.equals("quantity")) {
                     listing += "1" + TAB;
@@ -259,13 +267,16 @@ public class ListingCopier {
                 if (param.equals("item-note")) {
                     String itemNote = "";
                     if (item.getCondition() == 11) {
-                        itemNote = ItemNoteGenerator.getItemNote(item.getProductId(), config.getItemNoteNew(), toRegion);
+                        itemNote = ItemNoteGenerator
+                                .getItemNote(item.getProductId(), config.getItemNoteNew(), toRegion);
                     }
-                    if (item.getCondition() == 2) {
+                    if (item.getCondition() < 11) {
                         if (item.getObiItem()) {
-                            itemNote = ItemNoteGenerator.getItemNote(item.getProductId(), config.getItemNoteObi(), toRegion);
+                            itemNote = ItemNoteGenerator.getItemNote(item.getProductId(), config.getItemNoteObi(),
+                                    toRegion);
                         } else {
-                            itemNote = ItemNoteGenerator.getItemNote(item.getProductId(), config.getItemNoteUsed(), toRegion);
+                            itemNote = ItemNoteGenerator.getItemNote(item.getProductId(), config.getItemNoteUsed(),
+                                    toRegion);
                         }
                     }
                     listing += itemNote + TAB;
@@ -294,7 +305,7 @@ public class ListingCopier {
             }
             listing = listing.trim();
             listing += NEWLINE;
-            byte[] listingBytes = listing.getBytes();
+            byte[] listingBytes = listing.getBytes(charset);
             dos.write(listingBytes);
             byteWritten += listingBytes.length;
         }

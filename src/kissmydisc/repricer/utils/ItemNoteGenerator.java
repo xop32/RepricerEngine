@@ -14,21 +14,19 @@ public class ItemNoteGenerator {
 
     public static String getItemNote(final String asin, final String itemNoteFormat, final String region) {
         String itemNote = itemNoteFormat;
-        if ("JP".equals(region) || "N-JP".equals(region)) {
-            String replace = "";
-            KMDProductionInventoryDAO dao = new KMDProductionInventoryDAO();
-            List<String> asinList = new ArrayList<>();
-            asinList.add(asin);
-            try {
-                Map<String, String> mp = dao.getCatalogNumber(asinList);
-                if (mp.containsKey(asin)) {
-                    replace = mp.get(asin);
-                }
-            } catch (Exception e) {
-                log.error("Error getting ItemNote for " + asin, e);
+        String catalogNumber = "";
+        KMDProductionInventoryDAO dao = new KMDProductionInventoryDAO();
+        List<String> asinList = new ArrayList<>();
+        asinList.add(asin);
+        try {
+            Map<String, String> mp = dao.getCatalogNumber(asinList);
+            if (mp.containsKey(asin)) {
+                catalogNumber = mp.get(asin);
             }
-            itemNote = itemNote.replace("{catalog-number}", replace);
+        } catch (Exception e) {
+            log.error("Error getting ItemNote for " + asin, e);
         }
+        itemNote = itemNote.replace("{catalog-number}", catalogNumber);
         return itemNote;
     }
 }

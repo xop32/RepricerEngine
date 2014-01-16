@@ -185,11 +185,7 @@ public class CreateListingsWorker {
             InventoryFeedItem item = new InventoryFeedItem();
             item.setInventoryId(newInventoryId);
             item.setObiItem(false);
-            if (region.equals("JP")) {
-                item.setPrice(20000.0F * 1000);
-            } else {
-                item.setPrice(20000.0F);
-            }
+            item.setPrice(20000.0F);
             item.setQuantity(0);
             item.setProductId(asin);
             item.setRegionProductId("N-" + region + "_" + asin);
@@ -201,7 +197,7 @@ public class CreateListingsWorker {
             }
             if (!availableConditions.contains(USED)) {
                 InventoryFeedItem newItem = clone(item);
-                newItem.setCondition(2);
+                newItem.setCondition(3);
                 newItem.setSku(getRandomString());
                 items.add(newItem);
             }

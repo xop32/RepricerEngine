@@ -99,7 +99,7 @@ public class AmazonInventoryLoaderFeedManager implements RepriceFeedManager {
                 if (param.equals("item-note")) {
                     if (item.getCondition() == 11) {
                         listing += config.getItemNoteNew() + Constants.TAB;
-                    } else if (item.getCondition() == 2) {
+                    } else if (item.getCondition() < 11) {
                         if (item.getObiItem()) {
                             listing += config.getItemNoteObi() + Constants.TAB;
                         } else {
