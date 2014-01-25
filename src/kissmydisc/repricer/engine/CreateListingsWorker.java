@@ -12,14 +12,17 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
+import kissmydisc.repricer.dao.AmazonAccessor;
 import kissmydisc.repricer.dao.DBException;
 import kissmydisc.repricer.dao.InventoryItemDAO;
 import kissmydisc.repricer.dao.LatestInventoryDAO;
+import kissmydisc.repricer.dao.RepricerConfigurationDAO;
 import kissmydisc.repricer.model.InventoryFeedItem;
 import kissmydisc.repricer.utils.Pair;
 
@@ -29,13 +32,9 @@ public class CreateListingsWorker {
 
     private static final Log log = LogFactory.getLog(CreateListingsWorker.class);
 
-    private static final int NEW = 1;
-
-    private static final int USED = 2;
-
-    private static final int OBI = 3;
-
     private String fileUrl;
+
+    private AmazonAccessor accessor = null;
 
     public CreateListingsWorker(String region) {
         this.region = region;
@@ -47,6 +46,8 @@ public class CreateListingsWorker {
     }
 
     public void createListings() throws Exception {
+        Pair<String, String> marketplaceSeller = new RepricerConfigurationDAO().getRepricerMarketplaceAndSeller(region);
+        accessor = new AmazonAccessor(region, marketplaceSeller.getFirst(), marketplaceSeller.getSecond());
         if (fileUrl == null) {
             createListingsFromDB();
         } else {
@@ -82,9 +83,10 @@ public class CreateListingsWorker {
         Pair<Long, Pair<Long, Long>> latestInventory = new LatestInventoryDAO()
                 .getLatestInventoryWithCountAndId(region);
         BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(filePath)));
-        Map<String, List<Integer>> availabilityMap = new HashMap<String, List<Integer>>();
+        Map<String, List<ProductCondition>> availabilityMap = new HashMap<String, List<ProductCondition>>();
         long newInventoryId = System.currentTimeMillis() / 1000;
         int totalAdded = 0;
+        new LatestInventoryDAO().setLatestInventory("N-" + region, newInventoryId, totalAdded);
         try {
             String line = null;
             do {
@@ -93,34 +95,34 @@ public class CreateListingsWorker {
                     String productId = line.trim();
                     List<InventoryFeedItem> items = new InventoryItemDAO().getMatchingItems(latestInventory.getFirst(),
                             region, productId);
-                    List<Integer> availability = new ArrayList<Integer>();
+                    List<ProductCondition> availability = new ArrayList<ProductCondition>();
                     if (items != null) {
                         for (InventoryFeedItem item : items) {
                             if (item.isValid()) {
                                 if (item.getCondition() == 11) {
-                                    availability.add(NEW);
+                                    availability.add(ProductCondition.NEW);
                                 }
                                 if (item.getCondition() < 11) {
                                     if (item.getObiItem()) {
-                                        availability.add(OBI);
+                                        availability.add(ProductCondition.OBI);
                                     } else {
-                                        availability.add(USED);
+                                        availability.add(ProductCondition.USED);
                                     }
                                 }
                             }
                         }
                     }
                     availabilityMap.put(productId, availability);
-                    if (availabilityMap.size() > 500) {
+                    if (availabilityMap.size() > 100) {
                         totalAdded += createNewListings(newInventoryId, availabilityMap);
                         new LatestInventoryDAO().setLatestInventory("N-" + region, newInventoryId, totalAdded);
-                        availabilityMap = new HashMap<String, List<Integer>>();
+                        availabilityMap = new HashMap<String, List<ProductCondition>>();
                     }
                 } else {
                     if (availabilityMap != null && availabilityMap.size() > 0) {
                         totalAdded += createNewListings(newInventoryId, availabilityMap);
                         new LatestInventoryDAO().setLatestInventory("N-" + region, newInventoryId, totalAdded);
-                        availabilityMap = new HashMap<String, List<Integer>>();
+                        availabilityMap = new HashMap<String, List<ProductCondition>>();
                     }
                 }
             } while (line != null);
@@ -133,7 +135,7 @@ public class CreateListingsWorker {
 
     public void createListingsFromDB() throws Exception {
         InventoryItemDAO inventoryDAO = new InventoryItemDAO();
-        int limit = 500;
+        int limit = 100;
         String moreToken = null;
         Pair<Long, Pair<Long, Long>> latestInventory = new LatestInventoryDAO()
                 .getLatestInventoryWithCountAndId(region);
@@ -146,17 +148,17 @@ public class CreateListingsWorker {
                     latestInventory.getFirst(), region, moreToken, limit);
             moreToken = itemsAndMoreToken.getSecond();
             List<InventoryFeedItem> items = itemsAndMoreToken.getFirst();
-            Map<String, List<Integer>> availabilityMap = new HashMap<String, List<Integer>>();
+            Map<String, List<ProductCondition>> availabilityMap = new HashMap<String, List<ProductCondition>>();
             for (InventoryFeedItem item : items) {
                 if (item.isValid()) {
                     if (!availabilityMap.containsKey(item.getProductId())) {
-                        availabilityMap.put(item.getProductId(), new ArrayList<Integer>());
+                        availabilityMap.put(item.getProductId(), new ArrayList<ProductCondition>());
                     }
-                    int condition = NEW;
+                    ProductCondition condition = ProductCondition.NEW;
                     if (item.getCondition() < 11) {
-                        condition = USED;
+                        condition = ProductCondition.USED;
                         if (item.getObiItem()) {
-                            condition = OBI;
+                            condition = ProductCondition.OBI;
                         }
                     }
                     availabilityMap.get(item.getProductId()).add(condition);
@@ -176,37 +178,50 @@ public class CreateListingsWorker {
         } while (moreToken != null);
     }
 
-    private int createNewListings(long newInventoryId, Map<String, List<Integer>> availabilityMap) throws DBException {
+    private int createNewListings(long newInventoryId, Map<String, List<ProductCondition>> availabilityMap)
+            throws DBException {
         int totalAdded = 0;
-        for (Map.Entry<String, List<Integer>> entry : availabilityMap.entrySet()) {
+        Set<String> asins = availabilityMap.keySet();
+        CreateListingsFilter filter = new CreateListingsFilter(asins, accessor);
+        for (Map.Entry<String, List<ProductCondition>> entry : availabilityMap.entrySet()) {
             String asin = entry.getKey();
-            List<Integer> availableConditions = entry.getValue();
+            List<ProductCondition> availableConditions = entry.getValue();
             List<InventoryFeedItem> items = new ArrayList<InventoryFeedItem>();
             InventoryFeedItem item = new InventoryFeedItem();
             item.setInventoryId(newInventoryId);
             item.setObiItem(false);
-            item.setPrice(20000.0F);
+            float price = 20000.0F;
+            if (!region.equals("JP")) {
+                price = 999.0F;
+            }
+            item.setPrice(price);
             item.setQuantity(0);
             item.setProductId(asin);
             item.setRegionProductId("N-" + region + "_" + asin);
             item.setRegion("N-" + region);
-            if (!availableConditions.contains(NEW)) {
+            if (!availableConditions.contains(ProductCondition.NEW)) {
                 item.setCondition(11);
                 item.setSku(getRandomString());
-                items.add(item);
+                if (filter.shouldFilter(region, asin, ProductCondition.NEW) == false) {
+                    items.add(item);
+                }
             }
-            if (!availableConditions.contains(USED)) {
+            if (!availableConditions.contains(ProductCondition.USED)) {
                 InventoryFeedItem newItem = clone(item);
                 newItem.setCondition(3);
                 newItem.setSku(getRandomString());
-                items.add(newItem);
+                if (filter.shouldFilter(region, asin, ProductCondition.USED) == false) {
+                    items.add(newItem);
+                }
             }
-            if (!availableConditions.contains(OBI)) {
+            if (!availableConditions.contains(ProductCondition.OBI)) {
                 InventoryFeedItem newItem = clone(item);
                 newItem.setObiItem(true);
                 newItem.setCondition(2);
                 newItem.setSku(getRandomString());
-                items.add(newItem);
+                if (filter.shouldFilter(region, asin, ProductCondition.OBI) == false) {
+                    items.add(newItem);
+                }
             }
             totalAdded += items.size();
             if (items.size() > 0) {

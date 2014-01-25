@@ -14,7 +14,9 @@ import kissmydisc.repricer.dao.AmazonAccessor;
 import kissmydisc.repricer.dao.DBException;
 import kissmydisc.repricer.dao.InventoryItemDAO;
 import kissmydisc.repricer.dao.ProductDAO;
+import kissmydisc.repricer.dao.ProductDetailDAO;
 import kissmydisc.repricer.model.InventoryFeedItem;
+import kissmydisc.repricer.model.ProductDetail;
 import kissmydisc.repricer.model.ProductDetails;
 import kissmydisc.repricer.utils.Pair;
 
@@ -24,11 +26,15 @@ public class ExternalDataManager {
 
     private Map<String, InventoryFeedItem> items = new HashMap<String, InventoryFeedItem>();
 
+    private Map<String, String> productTypes = null;
+
     private Map<String, Float> priceMap = new HashMap<String, Float>();
 
     private Map<String, Integer> quantityMap = new HashMap<String, Integer>();
 
     private Map<String, Float> weightMap = new HashMap<String, Float>();
+
+    Map<String, ProductDetails> productdetails = new HashMap<String, ProductDetails>();
 
     private List<String> skus = new ArrayList<String>();
 
@@ -141,6 +147,7 @@ public class ExternalDataManager {
                     reqdProductIds.add(id);
                 }
                 Map<String, ProductDetails> productDetails = dao.getProductDetails(reqdProductIds);
+                productdetails.putAll(productDetails);
                 skuNotFoundInDB.addAll(convertToRetrievableData(productDetails));
             } catch (DBException e) {
                 log.error("Unable to retrieve product details from DB", e);
@@ -293,7 +300,6 @@ public class ExternalDataManager {
                     log.error("Unable to retrieve lowest prices from Amazon.", e);
                 }
             }
-
         }
         if (lowestAmazonPriceMap.containsKey(sku)) {
             return lowestAmazonPriceMap.get(sku);
@@ -415,6 +421,7 @@ public class ExternalDataManager {
                         log.warn("Matching product could not be found for " + item);
                     }
                     productDetails.add(details);
+                    productdetails.put(productId, details);
                 }
             }
         } catch (Exception e) {
@@ -472,6 +479,27 @@ public class ExternalDataManager {
         return skuNotFoundInDB;
     }
 
+    public String getProductType(String asin) {
+        if (productTypes == null) {
+            productTypes = new HashMap<String, String>();
+            try {
+                Map<String, ProductDetail> details = new ProductDetailDAO().getProductDetails(productIds);
+                for (String a : details.keySet()) {
+                    ProductDetail detail = details.get(a);
+                    if (detail.getProductType() != null) {
+                        productTypes.put(a, detail.getProductType());
+                    }
+                }
+            } catch (DBException e) {
+                // Ignore
+            }
+        }
+        if (productTypes.containsKey(asin)) {
+            return productTypes.get(asin);
+        }
+        return "";
+    }
+
     public Float getLowestAmazonPrice(String sku) {
         if (priceMap.containsKey(sku)) {
             return priceMap.get(sku);
@@ -492,6 +520,26 @@ public class ExternalDataManager {
             cache();
             return getWeight(sku);
         }
+    }
+
+    public Float getLowestAmazonPrice(String productId, ProductCondition condition) {
+        if (productdetails.containsKey(productId)) {
+            ProductDetails detail = productdetails.get(productId);
+            switch (condition) {
+            case NEW:
+                if (detail.getNewPrice() != null) {
+                    return detail.getNewPrice();
+                }
+                break;
+            case USED:
+            case OBI:
+                if (detail.getUsedPrice() != null) {
+                    return detail.getUsedPrice();
+                }
+                break;
+            }
+        }
+        return -1.0F;
     }
 
 }

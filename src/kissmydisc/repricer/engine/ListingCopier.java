@@ -105,19 +105,23 @@ public class ListingCopier {
                         item.setInventoryId(toInventoryId);
                         String sku = item.getSku();
                         if (item.getCondition() == 11) {
-                            sku = "N-MA-" + toRegion + id++;
+                            sku = id++ + "-N" + toRegion;
                         }
                         if (item.getCondition() < 11) {
                             if (item.getObiItem()) {
-                                sku = "O-MA-" + toRegion + id++;
+                                sku = id++ + "-O" + toRegion;
                             } else {
-                                sku = "U-MA-" + toRegion + id++;
+                                sku = id++ + "-U" + toRegion;
                             }
                         }
                         pqFeed.setPrice(item.getPrice());
                         pqFeed.setQuantity(item.getQuantity());
                         if (item.getQuantity() == 0) {
-                            pqFeed.setPrice(20000);
+                            if ("JP".equals(toRegion)) {
+                                pqFeed.setPrice(20000.0F);
+                            } else {
+                                pqFeed.setPrice(999.0F);
+                            }
                             quantityZero.add(pqFeed);
                         }
                         item.setSku(sku);
@@ -257,7 +261,7 @@ public class ListingCopier {
                 if (param.equals("price")) {
                     float price = item.getPrice();
                     if (toRegion.equals("JP") && item.getQuantity() == 0) {
-                        price = 97000.0F; // logic should be revisited
+                        price = 197000.0F; // logic should be revisited
                     }
                     listing += PriceUtils.getPrice(price, toRegion) + TAB;
                 }

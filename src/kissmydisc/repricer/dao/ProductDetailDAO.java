@@ -41,7 +41,9 @@ public class ProductDetailDAO extends DBAccessor {
                 String artist = rs.getString("ARTIST");
                 String author = rs.getString("AUTHOR");
                 String title = rs.getString("TITLE");
+                String productType = rs.getString("PRODUCT_TYPE");
                 ProductDetail detail = new ProductDetail(productId, artist, author, title);
+                detail.setProductType(productType);
                 map.put(productId, detail);
             }
             return map;
@@ -55,7 +57,7 @@ public class ProductDetailDAO extends DBAccessor {
     }
 
     public void addProductDetails(Map<String, ProductDetail> map) throws DBException {
-        String insertQuery = "insert into product_info (PRODUCT_ID, ARTIST, TITLE, AUTHOR) values (?, ?, ?, ?) ON DUPLICATE KEY UPDATE ARTIST = values(ARTIST), AUTHOR=values(AUTHOR), TITLE=values(TITLE)";
+        String insertQuery = "insert into product_info (PRODUCT_ID, ARTIST, TITLE, AUTHOR, PRODUCT_TYPE) values (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ARTIST = values(ARTIST), AUTHOR=values(AUTHOR), TITLE=values(TITLE), PRODUCT_TYPE=values(PRODUCT_TYPE)";
         PreparedStatement st = null;
         Connection conn = null;
         try {
@@ -66,6 +68,7 @@ public class ProductDetailDAO extends DBAccessor {
                 st.setString(2, entry.getValue().getArtist());
                 st.setString(3, entry.getValue().getTitle());
                 st.setString(4, entry.getValue().getAuthor());
+                st.setString(5, entry.getValue().getProductType());
                 st.addBatch();
             };
             st.executeBatch();

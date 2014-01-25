@@ -51,23 +51,23 @@ public class RepricerConfigurationDAO extends DBAccessor {
         super();
     }
 
-    private Map<String, Pair<String, String>> getRepricerMarketplaceAndSeller() throws DBException {
-        String selectQuery = "select region, marketplace_id, seller_id from repricer_configuration RC";
+    public Pair<String, String> getRepricerMarketplaceAndSeller(String region) throws DBException {
+        String selectQuery = "select region, marketplace_id, seller_id from repricer_configuration where region = ?";
         PreparedStatement st = null;
         Connection conn = null;
         ResultSet rs = null;
-        Map<String, Pair<String, String>> repricerConfig = new HashMap<String, Pair<String, String>>();
+        Pair<String, String> marketplaceSeller = new Pair<String, String>(null, null);
         try {
             conn = getConnection();
             st = conn.prepareStatement(selectQuery);
+            st.setString(1, region);
             rs = st.executeQuery();
             while (rs.next()) {
-                String region = rs.getString("REGION");
                 String marketplace = rs.getString("MARKETPLACE_ID");
                 String sellerId = rs.getString("SELLER_ID");
-                repricerConfig.put(region, new Pair<String, String>(marketplace, sellerId));
+                marketplaceSeller = new Pair<String, String>(marketplace, sellerId);
             }
-            return repricerConfig;
+            return marketplaceSeller;
         } catch (SQLException e) {
             throw new DBException(e);
         } finally {

@@ -106,8 +106,8 @@ public class AmazonAccessor {
     private static MarketplaceWebService getFeedsServiceClient(String region, Properties properties) {
         String accessKey = properties.getProperty(region + "_ACCESS_KEY");
         String secretKey = properties.getProperty(region + "_SECRET_KEY");
-        MarketplaceWebService service = new MarketplaceWebServiceClient(accessKey, secretKey, "SimplyReliableRepricer-" + region,
-                "1.0", getClientConfig(region));
+        MarketplaceWebService service = new MarketplaceWebServiceClient(accessKey, secretKey, "SimplyReliableRepricer-"
+                + region, "1.0", getClientConfig(region));
         return service;
     }
 
@@ -1261,6 +1261,33 @@ public class AmazonAccessor {
                                             String artist = nn.getTextContent();
                                             detail.setArtist(artist);
                                         }
+                                        if ("ns2:ProductGroup".equals(nn.getNodeName())) {
+                                            String productType = nn.getTextContent();
+                                            detail.setProductType(productType);
+                                        }
+                                        if ("ns2:ItemDimensions".equals(nn.getNodeName())) {
+                                            NodeList nnl = nn.getChildNodes();
+                                            for (int j = 0; j < nnl.getLength(); j++) {
+                                                Node nnn = nnl.item(j);
+                                                if ("ns2:Weight".equals(nnn.getNodeName())) {
+                                                    Float weight = 0.0F;
+                                                    if (nnn.getTextContent() != null) {
+                                                        weight = Float.parseFloat(nnn.getTextContent());
+                                                    }
+                                                    String units = nnn.getAttributes().getNamedItem("Units")
+                                                            .getTextContent();
+                                                    units = units.toLowerCase();
+                                                    if ("pounds".equalsIgnoreCase(units)) {
+                                                        weight = weight * 453.592F; // (Converting
+                                                                                    // to
+                                                                                    // grams
+                                                                                    // from
+                                                                                    // pounds);
+                                                    }
+                                                    detail.setWeight(weight);
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1271,6 +1298,9 @@ public class AmazonAccessor {
                                 ok = true;
                             if (detail.getAuthor() != null)
                                 ok = true;
+                            if (detail.getProductType() != null) {
+                                ok = true;
+                            }
                             if (ok) {
                                 catalogMap.put(asin, detail);
                             }
@@ -1293,14 +1323,21 @@ public class AmazonAccessor {
                             throw e;
                         }
                     } else {
-                        throw e;
+                        shouldRetry = true;
+                        try {
+                            Thread.sleep(250);
+                        } catch (Exception e1) {
+                        }
+                        if (retry == MAX_RETRY - 1) {
+                            log.error("Unable to get details.", e);
+                            throw e;
+                        }
                     }
                 }
             }
         }
         return catalogMap;
     }
-
 }
 
 /*

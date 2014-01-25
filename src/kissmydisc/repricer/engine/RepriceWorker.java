@@ -699,6 +699,23 @@ public class RepriceWorker implements Runnable {
                                     }
                                 }
 
+                                if (reprice) {
+                                    if (region.equals("JP") || region.equals("N-JP")) {
+                                        String productType = dataManager.getProductType(productId);
+                                        if ("book".equalsIgnoreCase(productType) && (item.isUsed() || item.isOBI())) {
+                                            Float lowestNewPrice = dataManager.getLowestAmazonPrice(productId,
+                                                    ProductCondition.NEW);
+                                            if (lowestNewPrice != null && lowestNewPrice > 0) {
+                                                if (price > lowestNewPrice) {
+                                                    quantity = 0;
+                                                    quantityReset = true;
+                                                    auditTrail.append("\nBook price > " + lowestNewPrice + ", set Q = 0.");
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
                                 feed.setPrice((float) price);
                                 feed.setQuantity(quantity);
                                 activity.setFeed(feed);

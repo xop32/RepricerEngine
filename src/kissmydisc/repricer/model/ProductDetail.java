@@ -40,9 +40,27 @@ public class ProductDetail {
     public void setTitle(String title) {
         this.title = title;
     }
+    
+    public Float getWeight() {
+        return weight;
+    }
+    
+    public void setWeight(Float weight) {
+        this.weight = weight;
+    }
+    
+    public String getProductType() {
+        return this.productType;
+    }
+    
+    public void setProductType(String productType) {
+        this.productType = productType;
+    }
 
     private String productId;
     private String artist;
     private String author;
     private String title;
+    private Float weight = -1F;
+    private String productType;
 }
