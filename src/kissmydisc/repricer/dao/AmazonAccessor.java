@@ -67,6 +67,8 @@ import com.amazonservices.mws.products.model.PriceType;
 import com.amazonservices.mws.products.model.Product;
 import com.amazonservices.mws.products.model.ProductList;
 import com.amazonservices.mws.products.model.QualifiersType;
+import com.amazonservices.mws.products.model.SalesRankList;
+import com.amazonservices.mws.products.model.SalesRankType;
 import com.amazonservices.mws.products.model.SellerSKUListType;
 
 public class AmazonAccessor {
@@ -573,15 +575,15 @@ public class AmazonAccessor {
         return weightMap;
     }
 
-    public Map<String, Map<String, Pair<Float, Integer>>> getProductDetailsByASIN(List<String> productIds,
+    public Map<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> getProductDetailsByASIN(List<String> productIds,
             boolean onlyPrice) throws Exception {
         if (AppConfig.getBoolean("ShouldNotGetLowestPriceFromAmazon", false)) {
-            Map<String, Map<String, Pair<Float, Integer>>> testMap = new HashMap<String, Map<String, Pair<Float, Integer>>>();
+            Map<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> testMap = new HashMap<String, Pair<Integer, Map<String, Pair<Float, Integer>>>>();
             for (String key : productIds) {
                 Map<String, Pair<Float, Integer>> mp = new HashMap<String, Pair<Float, Integer>>();
                 mp.put("Used", new Pair<Float, Integer>(200F, 10));
                 mp.put("New", new Pair<Float, Integer>(250F, 15));
-                testMap.put(key, mp);
+                testMap.put(key, new Pair<Integer, Map<String, Pair<Float, Integer>>>(-1, mp));
             }
             return testMap;
         }
@@ -626,7 +628,7 @@ public class AmazonAccessor {
 
         GetLowestOfferListingsForASINResponse getLowestResponse = getLowestOfferings.getResponse();
 
-        Map<String, Map<String, Pair<Float, Integer>>> lowestPriceMap = new HashMap<String, Map<String, Pair<Float, Integer>>>();
+        Map<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> lowestPriceMap = new HashMap<String, Pair<Integer, Map<String, Pair<Float, Integer>>>>();
 
         if (getLowestResponse != null) {
 
@@ -648,7 +650,7 @@ public class AmazonAccessor {
         } else {
             log.warn("GetLowestOfferListings is null for " + productIds);
         }
-
+        int salesRankContent  = -1;
         if (response != null) {
             for (GetCompetitivePricingForASINResult result : response.getGetCompetitivePricingForASINResult()) {
                 if (result.isSetStatus()) {
@@ -667,9 +669,9 @@ public class AmazonAccessor {
                                         BigDecimal amount = moneyType.getAmount();
                                         price = amount.floatValue();
                                         if (!lowestPriceMap.containsKey(asin)) {
-                                            lowestPriceMap.put(asin, new HashMap<String, Pair<Float, Integer>>());
+                                            lowestPriceMap.put(asin, new Pair<Integer, Map<String, Pair<Float, Integer>>>(-1, new HashMap<String, Pair<Float, Integer>>()));
                                         }
-                                        Map<String, Pair<Float, Integer>> priceQtyMap = lowestPriceMap.get(asin);
+                                        Map<String, Pair<Float, Integer>> priceQtyMap = lowestPriceMap.get(asin).getSecond();
                                         if (!priceQtyMap.containsKey(compPrice.getCondition())) {
                                             priceQtyMap.put(compPrice.getCondition(), new Pair<Float, Integer>(price,
                                                     -1));
@@ -694,14 +696,37 @@ public class AmazonAccessor {
                                     String condition = offerListing.getCondition();
                                     quantity = offerListing.getValue();
                                     if (!lowestPriceMap.containsKey(asin)) {
-                                        lowestPriceMap.put(asin, new HashMap<String, Pair<Float, Integer>>());
+                                        lowestPriceMap.put(asin, new Pair<Integer, Map<String, Pair<Float, Integer>>>(-1, new  HashMap<String, Pair<Float, Integer>>()));
                                     }
-                                    Map<String, Pair<Float, Integer>> priceQtyMap = lowestPriceMap.get(asin);
+                                    Map<String, Pair<Float, Integer>> priceQtyMap = lowestPriceMap.get(asin).getSecond();
                                     if (!priceQtyMap.containsKey(condition)) {
                                         priceQtyMap.put(condition, new Pair<Float, Integer>(-1F, quantity));
                                     } else {
                                         priceQtyMap.get(condition).setSecond(quantity);
                                     }
+                                }
+                                if (product.isSetSalesRankings()) {
+                                    SalesRankList salesRankList = product.getSalesRankings();
+                                    boolean firstOne = true;
+                                    for (SalesRankType salesRank : salesRankList.getSalesRank()) {
+                                        if (firstOne) {
+                                            salesRankContent = salesRank.getRank();
+                                            firstOne = false;
+                                        }
+                                        if (salesRank.getProductCategoryId().equals("music_display_on_website")) {
+                                            salesRankContent = salesRank.getRank();
+                                        } else if (salesRank.getProductCategoryId().equals("dvd_display_on_website")) {
+                                            salesRankContent = salesRank.getRank();
+                                        } else if (salesRank.getProductCategoryId().equals("video_games_display_on_website")) {
+                                            salesRankContent = salesRank.getRank();
+                                        } else if (salesRank.getProductCategoryId().equals("book_display_on_website")) {
+                                            salesRankContent = salesRank.getRank();
+                                        }
+                                    }
+                                    if (!lowestPriceMap.containsKey(asin)) {
+                                        lowestPriceMap.put(asin, new Pair<Integer, Map<String, Pair<Float, Integer>>>(-1, new  HashMap<String, Pair<Float, Integer>>()));
+                                    }
+                                    lowestPriceMap.get(asin).setFirst(salesRankContent);
                                 }
                             }
                         }
@@ -717,7 +742,7 @@ public class AmazonAccessor {
 
     private Map<String, List<String>> parseGetLowestOfferListingsResponse(
             GetLowestOfferListingsForASINResponse getLowestResponse,
-            Map<String, Map<String, Pair<Float, Integer>>> lowestPriceMap) {
+            Map<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> lowestPriceMap) {
         List<GetLowestOfferListingsForASINResult> lowestResults = getLowestResponse
                 .getGetLowestOfferListingsForASINResult();
         Map<String, List<String>> leftOutAsins = new HashMap<String, List<String>>();
@@ -729,7 +754,7 @@ public class AmazonAccessor {
                     boolean newItems = false;
                     boolean scannedAll = true;
                     if (!lowestPriceMap.containsKey(asin)) {
-                        lowestPriceMap.put(asin, new HashMap<String, Pair<Float, Integer>>());
+                        lowestPriceMap.put(asin, new Pair<Integer, Map<String, Pair<Float, Integer>>>(-1, new HashMap<String, Pair<Float, Integer>>()));
                     }
                     if (result.isSetAllOfferListingsConsidered()) {
                         scannedAll = result.isAllOfferListingsConsidered();
@@ -750,10 +775,10 @@ public class AmazonAccessor {
                                                 Float price = moneyType.getAmount().floatValue();
                                                 if (!lowestPriceMap.containsKey(asin)) {
                                                     lowestPriceMap.put(asin,
-                                                            new HashMap<String, Pair<Float, Integer>>());
+                                                            new Pair<Integer, Map<String, Pair<Float, Integer>>>(-1, new HashMap<String, Pair<Float, Integer>>()));
                                                 }
                                                 Map<String, Pair<Float, Integer>> priceQtyMap = lowestPriceMap
-                                                        .get(asin);
+                                                        .get(asin).getSecond();
                                                 if (condition.equals("Used")) {
                                                     usedItems = true;
                                                 }

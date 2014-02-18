@@ -245,7 +245,7 @@ public class ExternalDataManager {
 
     public Float getLowestRegionalPrice(String sku) {
         if (lowestAmazonPriceMap == null) {
-            Map<String, Map<String, Pair<Float, Integer>>> productPriceAndQuantity = new HashMap<String, Map<String, Pair<Float, Integer>>>();
+            Map<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> productPriceAndQuantity = new HashMap<String, Pair<Integer, Map<String, Pair<Float, Integer>>>>();
             lowestAmazonPriceMap = new HashMap<String, Float>();
 
             if ("KMD".equals(region)) {
@@ -270,9 +270,9 @@ public class ExternalDataManager {
                     }
                     try {
                         productPriceAndQuantity = currentAccessor.getProductDetailsByASIN(leftOutProductIds, true);
-                        for (Map.Entry<String, Map<String, Pair<Float, Integer>>> productEntry : productPriceAndQuantity
+                        for (Map.Entry<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> productEntry : productPriceAndQuantity
                                 .entrySet()) {
-                            for (Map.Entry<String, Pair<Float, Integer>> priceEntry : productEntry.getValue()
+                            for (Map.Entry<String, Pair<Float, Integer>> priceEntry : productEntry.getValue().getSecond()
                                     .entrySet()) {
                                 if (priceEntry.getValue() != null) {
                                     Float price = priceEntry.getValue().getFirst();
@@ -309,7 +309,7 @@ public class ExternalDataManager {
     }
 
     private List<String> cacheLowestRegionalPrices(
-            Map<String, Map<String, Pair<Float, Integer>>> productPriceAndQuantity,
+            Map<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> productPriceAndQuantity,
             Map<String, Float> lowestAmazonPriceMap) {
         Map<Long, Float> toUpdate = new HashMap<Long, Float>();
         List<String> priceNotAvailable = new ArrayList<String>();
@@ -318,7 +318,7 @@ public class ExternalDataManager {
                 String productId = items.get(tempSku).getProductId();
                 InventoryFeedItem item = items.get(tempSku);
                 if (productPriceAndQuantity.containsKey(productId)) {
-                    Map<String, Pair<Float, Integer>> pqWithCondition = productPriceAndQuantity.get(productId);
+                    Map<String, Pair<Float, Integer>> pqWithCondition = productPriceAndQuantity.get(productId).getSecond();
                     Pair<Float, Integer> toReturn = null;
                     Pair<Float, Integer> pq = pqWithCondition.get("New");
                     if (item.getCondition() == 11) {
@@ -369,7 +369,7 @@ public class ExternalDataManager {
                 String id = getAssociatedProductId(productId);
                 reqdProductIds.add(id);
             }
-            Map<String, Map<String, Pair<Float, Integer>>> productPriceAndQuantity = jpAccessor
+            Map<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> productPriceAndQuantity = jpAccessor
                     .getProductDetailsByASIN(reqdProductIds, false);
             productDetails = new ArrayList<ProductDetails>();
             for (String sku : skus) {
@@ -377,9 +377,10 @@ public class ExternalDataManager {
                 productId = getAssociatedProductId(productId);
                 InventoryFeedItem item = items.get(sku);
                 if (productPriceAndQuantity.containsKey(productId)) {
-                    Map<String, Pair<Float, Integer>> pqWithCondition = productPriceAndQuantity.get(productId);
+                    Map<String, Pair<Float, Integer>> pqWithCondition = productPriceAndQuantity.get(productId).getSecond();
                     Pair<Float, Integer> toReturn = null;
                     ProductDetails details = new ProductDetails();
+                    details.setSalesRank(productPriceAndQuantity.get(productId).getFirst());
                     details.setProductId(productId);
                     Pair<Float, Integer> pq = pqWithCondition.get("New");
                     if (pq != null) {

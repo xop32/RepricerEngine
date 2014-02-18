@@ -13,6 +13,7 @@ public class ProductDetails {
     public void setProductId(String productId) {
         this.productId = productId;
     }
+    
 
     private Float weight;
     private Float usedPrice = -1F;
@@ -20,6 +21,15 @@ public class ProductDetails {
     private Float newPrice = -1F;
     private Integer newQuantity = -1;
     private Date lastUpdated;
+    private Integer salesRank = -1;
+    
+    public void setSalesRank(int salesRank) {
+        this.salesRank = salesRank;
+    }
+    
+    public int getSalesRank() {
+        return this.salesRank;
+    }
 
     public Date getLastUpdated() {
         return lastUpdated;

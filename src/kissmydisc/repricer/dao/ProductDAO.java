@@ -277,8 +277,8 @@ public class ProductDAO extends DBAccessor {
     }
 
     public void updateProductPriceQuantityData(List<ProductDetails> productDetails) throws DBException {
-        String query = "insert into product_details (PRODUCT_ID, NEW_LOWEST_PRICE, NEW_QUANTITY, USED_LOWEST_PRICE, USED_QUANTITY, LAST_REFRESHED) values (?, ?, ?, ?, ?, ? ) ON DUPLICATE KEY UPDATE ";
-        query += " NEW_LOWEST_PRICE = values(NEW_LOWEST_PRICE), NEW_QUANTITY = values(NEW_QUANTITY), USED_QUANTITY = values(USED_QUANTITY), USED_LOWEST_PRICE = values(USED_LOWEST_PRICE), LAST_REFRESHED = values(LAST_REFRESHED) ";
+        String query = "insert into product_details (PRODUCT_ID, NEW_LOWEST_PRICE, NEW_QUANTITY, USED_LOWEST_PRICE, USED_QUANTITY, SALES_RANK, LAST_REFRESHED) values (?, ?, ?, ?, ?, ?, ? ) ON DUPLICATE KEY UPDATE ";
+        query += " NEW_LOWEST_PRICE = values(NEW_LOWEST_PRICE), NEW_QUANTITY = values(NEW_QUANTITY), USED_QUANTITY = values(USED_QUANTITY), USED_LOWEST_PRICE = values(USED_LOWEST_PRICE), LAST_REFRESHED = values(LAST_REFRESHED), SALES_RANK = values(SALES_RANK) ";
         PreparedStatement st = null;
         Connection conn = null;
         try {
@@ -292,6 +292,7 @@ public class ProductDAO extends DBAccessor {
                 st.setInt(index++, product.getNewQuantity());
                 st.setFloat(index++, product.getUsedPrice());
                 st.setInt(index++, product.getUsedQuantity());
+                st.setInt(index++, product.getSalesRank());
                 st.setTimestamp(index++, new Timestamp(System.currentTimeMillis()));
                 st.addBatch();
             }
