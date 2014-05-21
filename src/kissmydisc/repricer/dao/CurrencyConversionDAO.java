@@ -17,8 +17,8 @@ public class CurrencyConversionDAO extends DBAccessor {
         super();
     }
 
-    public Map<String, Float> getCurrencyConversion() throws DBException {
-        String selectQuery = "select * from exchange_rates where to_currency = 'USD'";
+    public Map<String, Float> getCurrencyConversion(String toCurrency) throws DBException {
+        String selectQuery = "select * from exchange_rates where to_currency = ? ";
         PreparedStatement st = null;
         Connection conn = null;
         ResultSet rs = null;
@@ -26,6 +26,7 @@ public class CurrencyConversionDAO extends DBAccessor {
             HashMap<String, Float> map = new HashMap<String, Float>();
             conn = getConnection();
             st = conn.prepareStatement(selectQuery);
+            st.setString(1, toCurrency);
             rs = st.executeQuery();
             while (rs.next()) {
                 String fromCurrency = rs.getString("from_currency");

@@ -140,7 +140,7 @@ public class CreateListingsAsyncCommand implements Runnable {
         String previewFile = AppConfig.getString("PreviewFileLocation");
         previewFile += region;
         String charset = "UTF-8";
-        if ("JP".equals(region)) {
+        if ("JP-1".equals(region) || "JP".equals(region)) {
             charset = "Shift_JIS";
         }
         // Writer out = new BufferedWriter((new OutputStreamWriter(new

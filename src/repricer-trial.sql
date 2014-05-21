@@ -3,7 +3,7 @@
 -- Server version:               5.5.27 - MySQL Community Server (GPL)
 -- Server OS:                    Win32
 -- HeidiSQL version:             7.0.0.4053
--- Date/time:                    2014-05-21 21:07:07
+-- Date/time:                    2014-04-11 16:51:02
 -- --------------------------------------------------------
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -15,13 +15,6 @@ CREATE DATABASE IF NOT EXISTS `repricer` /*!40100 DEFAULT CHARACTER SET latin1 *
 USE `repricer`;
 
 
--- Dumping structure for table repricer.asindetails
-CREATE TABLE IF NOT EXISTS `asindetails` (
-  `Title` varchar(1024) NOT NULL,
-  `ASIN` varchar(50) NOT NULL,
-  PRIMARY KEY (`ASIN`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
 -- Data exporting was unselected.
 
 
@@ -32,34 +25,6 @@ CREATE TABLE IF NOT EXISTS `asin_associations` (
   `jp_product_id` varchar(50) NOT NULL,
   PRIMARY KEY (`region`,`product_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-
--- Data exporting was unselected.
-
-
--- Dumping structure for table repricer.catalog
-CREATE TABLE IF NOT EXISTS `catalog` (
-  `sku` varchar(50) DEFAULT NULL,
-  `price` float DEFAULT NULL,
-  `quantity` int(11) DEFAULT NULL,
-  `catnumber` varchar(50) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-
--- Data exporting was unselected.
-
-
--- Dumping structure for table repricer.catalog_missing
-CREATE TABLE IF NOT EXISTS `catalog_missing` (
-  `sku` varchar(50) NOT NULL DEFAULT '',
-  `title` varchar(2000) DEFAULT NULL,
-  `artist` varchar(100) DEFAULT NULL,
-  `author` varchar(100) DEFAULT NULL,
-  `asin` varchar(100) DEFAULT NULL,
-  `id_catalog` varchar(100) DEFAULT NULL,
-  PRIMARY KEY (`sku`),
-  KEY `id_catalog` (`id_catalog`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Catalog table';
-
--- Data exporting was unselected.
 
 
 -- Dumping structure for table repricer.commands
@@ -76,19 +41,6 @@ CREATE TABLE IF NOT EXISTS `commands` (
 -- Data exporting was unselected.
 
 
--- Dumping structure for table repricer.create_listing_status
-CREATE TABLE IF NOT EXISTS `create_listing_status` (
-  `region` varchar(50) NOT NULL,
-  `stage` varchar(50) DEFAULT NULL,
-  `status` varchar(50) NOT NULL,
-  `started_time` time DEFAULT NULL,
-  `end_time` time DEFAULT NULL,
-  PRIMARY KEY (`region`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-
--- Data exporting was unselected.
-
-
 -- Dumping structure for table repricer.exchange_rates
 CREATE TABLE IF NOT EXISTS `exchange_rates` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -97,8 +49,6 @@ CREATE TABLE IF NOT EXISTS `exchange_rates` (
   `factor` float NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-
--- Data exporting was unselected.
 
 
 -- Dumping structure for table repricer.feed_submissions
@@ -306,7 +256,7 @@ CREATE TABLE IF NOT EXISTS `python_commands` (
 
 -- Dumping structure for table repricer.repricer_configuration
 CREATE TABLE IF NOT EXISTS `repricer_configuration` (
-  `region` varchar(10) NOT NULL,
+  `region` varchar(4) NOT NULL,
   `repricer_status` varchar(15) DEFAULT NULL,
   `formula_id` int(10) NOT NULL,
   `latest_reprice_id` int(10) NOT NULL DEFAULT '-1',

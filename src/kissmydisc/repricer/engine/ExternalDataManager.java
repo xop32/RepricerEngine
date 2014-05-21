@@ -10,6 +10,8 @@ import java.util.Map;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
+import com.mchange.v2.c3p0.test.StatsTest;
+
 import kissmydisc.repricer.dao.AmazonAccessor;
 import kissmydisc.repricer.dao.DBException;
 import kissmydisc.repricer.dao.InventoryItemDAO;
@@ -18,6 +20,7 @@ import kissmydisc.repricer.dao.ProductDetailDAO;
 import kissmydisc.repricer.model.InventoryFeedItem;
 import kissmydisc.repricer.model.ProductDetail;
 import kissmydisc.repricer.model.ProductDetails;
+import kissmydisc.repricer.model.ProductStat;
 import kissmydisc.repricer.utils.Pair;
 
 public class ExternalDataManager {
@@ -96,6 +99,7 @@ public class ExternalDataManager {
         }
         this.cachedWithin = cachedWithin;
         this.jpAccessor = jpAccessor;
+        this.currentRegionAccessor = jpAccessor;
         this.regionAccessorMap = regionAccessorMap;
         this.exchangeRates = exchangeRates;
     }
@@ -212,9 +216,7 @@ public class ExternalDataManager {
                 }
 
                 Thread getPQThread = new Thread(new Runnable() {
-
                     public void run() {
-
                         // Retrieve price and quantity from Amazon
                         try {
                             cachePriceAndQuantity(skuNotFoundInDB);
@@ -272,8 +274,8 @@ public class ExternalDataManager {
                         productPriceAndQuantity = currentAccessor.getProductDetailsByASIN(leftOutProductIds, true);
                         for (Map.Entry<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> productEntry : productPriceAndQuantity
                                 .entrySet()) {
-                            for (Map.Entry<String, Pair<Float, Integer>> priceEntry : productEntry.getValue().getSecond()
-                                    .entrySet()) {
+                            for (Map.Entry<String, Pair<Float, Integer>> priceEntry : productEntry.getValue()
+                                    .getSecond().entrySet()) {
                                 if (priceEntry.getValue() != null) {
                                     Float price = priceEntry.getValue().getFirst();
                                     if (price > 0) {
@@ -318,7 +320,8 @@ public class ExternalDataManager {
                 String productId = items.get(tempSku).getProductId();
                 InventoryFeedItem item = items.get(tempSku);
                 if (productPriceAndQuantity.containsKey(productId)) {
-                    Map<String, Pair<Float, Integer>> pqWithCondition = productPriceAndQuantity.get(productId).getSecond();
+                    Map<String, Pair<Float, Integer>> pqWithCondition = productPriceAndQuantity.get(productId)
+                            .getSecond();
                     Pair<Float, Integer> toReturn = null;
                     Pair<Float, Integer> pq = pqWithCondition.get("New");
                     if (item.getCondition() == 11) {
@@ -360,28 +363,194 @@ public class ExternalDataManager {
         return productId;
     }
 
+    private int getProductSalesRank(int currentSalesRank, String productId) throws DBException {
+        ProductDAO dao = new ProductDAO();
+        List<ProductStat> stats = dao.getProductStats(productId);
+        int total = stats.size();
+        int salesRankTotal = currentSalesRank;
+        if (salesRankTotal != -1) {
+            total++;
+        } else {
+            salesRankTotal = 0;
+        }
+        for (ProductStat stat : stats) {
+            salesRankTotal += stat.getSalesRank();
+        }
+        if (total > 0) {
+            return (salesRankTotal / total);
+        } else {
+            return salesRankTotal;
+        }
+    }
+
+    private Map<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> getProductDetails(List<String> reqdProductIds) {
+        String[] order = { "US", "DE", "UK" };
+        Map<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> productPriceAndQuantity = new HashMap<String, Pair<Integer, Map<String, Pair<Float, Integer>>>>();
+        Map<String, List<Float>> usedPrices = new HashMap<String, List<Float>>();
+        Map<String, List<Float>> newPrices = new HashMap<String, List<Float>>();
+        Map<String, Integer> usedQuantities = new HashMap<String, Integer>();
+        Map<String, Integer> newQuantities = new HashMap<String, Integer>();
+        for (String entry : order) {
+            AmazonAccessor currentAccessor = regionAccessorMap.get(entry);
+            Float exchangeRate = 1.0F;
+            String currency = "USD";
+            if (entry.equals("UK"))
+                currency = "GBP";
+            if (entry.equals("FR") || entry.equals("DE") || entry.equals("IT") || entry.equals("ES"))
+                currency = "EUR";
+            if (entry.equals("CA"))
+                currency = "CAD";
+            if (exchangeRates.containsKey(currency)) {
+                exchangeRate = exchangeRates.get(currency);
+            }
+            Map<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> products = new HashMap<String, Pair<Integer, Map<String, Pair<Float, Integer>>>>();
+            try {
+                products = currentAccessor.getProductDetailsByASIN(reqdProductIds, false);
+                for (Map.Entry<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> productEntry : products
+                        .entrySet()) {
+                    for (Map.Entry<String, Pair<Float, Integer>> priceEntry : productEntry.getValue().getSecond()
+                            .entrySet()) {
+                        if (priceEntry.getValue() != null) {
+                            Float price = priceEntry.getValue().getFirst();
+                            if (price > 0) {
+                                price = price * exchangeRate;
+                                priceEntry.getValue().setFirst(price);
+                                if (priceEntry.getKey().equals("Used")) {
+                                    if (!usedPrices.containsKey(productEntry.getKey())) {
+                                        usedPrices.put(productEntry.getKey(), new ArrayList<Float>());
+                                    }
+                                    usedPrices.get(productEntry.getKey()).add(price);
+                                } else if (priceEntry.getKey().equals("New")) {
+                                    if (!newPrices.containsKey(productEntry.getKey())) {
+                                        newPrices.put(productEntry.getKey(), new ArrayList<Float>());
+                                    }
+                                    newPrices.get(productEntry.getKey()).add(price);
+                                }
+                            }
+                            int quantity = priceEntry.getValue().getSecond();
+                            if (quantity > 0) {
+                                if (priceEntry.getKey().equals("Used")) {
+                                    if (!usedQuantities.containsKey(productEntry.getKey())) {
+                                        usedQuantities.put(productEntry.getKey(), 0);
+                                    }
+                                    int current = usedQuantities.get(productEntry.getKey());
+                                    if (current < quantity) {
+                                        usedQuantities.put(productEntry.getKey(), quantity);
+                                    }
+                                } else if (priceEntry.getKey().equals("New")) {
+                                    if (!newQuantities.containsKey(productEntry.getKey())) {
+                                        newQuantities.put(productEntry.getKey(), 0);
+                                    }
+                                    int current = newQuantities.get(productEntry.getKey());
+                                    if (current < quantity) {
+                                        newQuantities.put(productEntry.getKey(), quantity);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Unable to retrieve lowest prices from Amazon - " + entry, e);
+            }
+        }
+        for (String productId : reqdProductIds) {
+            int newQuantity = -1;
+            int usedQuantity = -1;
+            Float usedPrice = -1.0F;
+            Float newPrice = -1.0F;
+            if (newQuantities.containsKey(productId)) {
+                newQuantity = newQuantities.get(productId);
+            }
+            if (usedQuantities.containsKey(productId)) {
+                usedQuantity = usedQuantities.get(productId);
+            }
+            if (usedPrices.containsKey(productId)) {
+                List<Float> prices = usedPrices.get(productId);
+                int count = 0;
+                Float price = 0.0F;
+                for (Float p : prices) {
+                    if (p > 0.0F) {
+                        count++;
+                        price += p;
+                    }
+                }
+                if (count > 0) {
+                    usedPrice = (price / count);
+                }
+            }
+            if (newPrices.containsKey(productId)) {
+                List<Float> prices = newPrices.get(productId);
+                int count = 0;
+                Float price = 0.0F;
+                for (Float p : prices) {
+                    if (p > 0.0F) {
+                        count++;
+                        price += p;
+                    }
+                }
+                if (count > 0) {
+                    newPrice = (price / count);
+                }
+            }
+            Map<String, Pair<Float, Integer>> usedNewPQ = new HashMap<String, Pair<Float, Integer>>();
+            usedNewPQ.put("Used", new Pair<Float, Integer>(usedPrice, usedQuantity));
+            usedNewPQ.put("New", new Pair<Float, Integer>(newPrice, newQuantity));
+            Pair<Integer, Map<String, Pair<Float, Integer>>> pqs = new Pair<Integer, Map<String, Pair<Float, Integer>>>(
+                    -1, usedNewPQ);
+            productPriceAndQuantity.put(productId, pqs);
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("ProductPriceAndQuantity for JP-1" + productPriceAndQuantity);
+        }
+        return productPriceAndQuantity;
+    }
+
     private void cachePriceAndQuantity(List<String> skus) {
         // Retrieve product details from Amazon JP.
         List<ProductDetails> productDetails = null;
+        List<ProductStat> productStats = null;
         try {
             List<String> reqdProductIds = new ArrayList<String>();
             for (String productId : productIds) {
                 String id = getAssociatedProductId(productId);
                 reqdProductIds.add(id);
             }
-            Map<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> productPriceAndQuantity = jpAccessor
-                    .getProductDetailsByASIN(reqdProductIds, false);
+            Map<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> productPriceAndQuantity = new HashMap<String, Pair<Integer, Map<String, Pair<Float, Integer>>>>();
+            if (region.equals("N-JP-1") || region.equals("JP-1")) {
+                productPriceAndQuantity = getProductDetails(reqdProductIds);
+            } else {
+                productPriceAndQuantity = jpAccessor.getProductDetailsByASIN(reqdProductIds, false);
+            }
             productDetails = new ArrayList<ProductDetails>();
+            productStats = new ArrayList<ProductStat>();
             for (String sku : skus) {
                 String productId = items.get(sku).getProductId();
                 productId = getAssociatedProductId(productId);
                 InventoryFeedItem item = items.get(sku);
                 if (productPriceAndQuantity.containsKey(productId)) {
-                    Map<String, Pair<Float, Integer>> pqWithCondition = productPriceAndQuantity.get(productId).getSecond();
+                    Map<String, Pair<Float, Integer>> pqWithCondition = productPriceAndQuantity.get(productId)
+                            .getSecond();
                     Pair<Float, Integer> toReturn = null;
                     ProductDetails details = new ProductDetails();
-                    details.setSalesRank(productPriceAndQuantity.get(productId).getFirst());
+                    details.setSalesRank(getProductSalesRank(productPriceAndQuantity.get(productId).getFirst(),
+                            productId));
                     details.setProductId(productId);
+                    ProductStat stat = new ProductStat();
+                    stat.setProductId(productId);
+                    stat.setSalesRank(productPriceAndQuantity.get(productId).getFirst());
+                    boolean shouldAdd = true;
+                    for (ProductStat s : productStats) {
+                        if (s.getProductId().equals(productId)) {
+                            shouldAdd = false;
+                        }
+                        if (s.getSalesRank() == -1) {
+                            shouldAdd = false;
+                        }
+                    }
+                    if (shouldAdd) {
+                        productStats.add(stat);
+                    }
                     Pair<Float, Integer> pq = pqWithCondition.get("New");
                     if (pq != null) {
                         if (pq.getFirst() != null) {
@@ -429,11 +598,12 @@ public class ExternalDataManager {
             log.error("Unable to get product price and quantity", e);
         }
 
-        if (productDetails != null && productDetails.size() > 0) {
+        if (!(region.equals("JP-1") || region.equals("N-JP-1")) && productDetails != null && productDetails.size() > 0) {
             // Update in DB.
             try {
                 ProductDAO dao = new ProductDAO();
                 dao.updateProductPriceQuantityData(productDetails);
+                new ProductDAO().addProductStats(productStats);
             } catch (DBException e) {
                 log.error("Unable to update product details in DB", e);
             }
@@ -468,8 +638,9 @@ public class ExternalDataManager {
                             quantityMap.put(sku, details.getUsedQuantity());
                         }
                     }
-                    if (cachedWithin >= 0 && details.getLastUpdated() != null
-                            && details.getLastUpdated().before(new Date(System.currentTimeMillis() - cachedWithin))) {
+                    if ((cachedWithin >= 0 && details.getLastUpdated() != null
+                            && details.getLastUpdated().before(new Date(System.currentTimeMillis() - cachedWithin)))
+                            || (region.equals("JP-1") || region.equals("N-JP-1"))) {
                         skuNotFoundInDB.add(sku);
                     }
                 } else {

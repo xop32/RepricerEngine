@@ -100,8 +100,11 @@ public class RepriceWorker implements Runnable {
         try {
             repriceConfigs = configDAO.getRepricers();
             log.info(repriceConfigs);
-            RepricerConfiguration JPConfig = null;
-            exchangeRates = new CurrencyConversionDAO().getCurrencyConversion();
+            if (region.equals("JP-1") || region.equals("N-JP-1")) {
+                exchangeRates = new CurrencyConversionDAO().getCurrencyConversion("JPY");
+            } else if (region.equals("KMD")) {
+                exchangeRates = new CurrencyConversionDAO().getCurrencyConversion("USD");
+            }
             for (RepricerConfiguration config : repriceConfigs) {
                 AmazonAccessor aAcc = new AmazonAccessor(config.getRegion(), config.getMarketplaceId(),
                         config.getSellerId());
@@ -135,6 +138,9 @@ public class RepriceWorker implements Runnable {
                             currentConfig.getSellerId());
                     if ("KMD".equals(currentConfig.getRegion())) {
                         feedManager = new KMDRepriceFeedManager(status.getRepriceId());
+                    } else if ("JP-1".equals(currentConfig.getRegion()) || "N-JP-1".equals(currentConfig.getRegion())) {
+                        feedManager = new AmazonRepriceFeedManager(status.getRepriceId(), currentConfig.getRegion(),
+                                jpAccessor, false);
                     } else {
                         feedManager = new AmazonRepriceFeedManager(status.getRepriceId(), currentConfig.getRegion(),
                                 amazonAccessor, false);
@@ -480,6 +486,9 @@ public class RepriceWorker implements Runnable {
             if (this.config.getRegion().equals("KMD")) {
                 dataManager = new ExternalDataManager(inventoryItems, this.config.getCacheRefreshTime(), jpAccessor,
                         amazonAccessorMap, exchangeRates);
+            } else if (this.config.getRegion().equals("JP-1") || this.config.getRegion().equals("N-JP-1")) {
+                dataManager = new ExternalDataManager(inventoryItems, this.config.getCacheRefreshTime(), jpAccessor,
+                        amazonAccessorMap, exchangeRates);
             } else {
                 dataManager = new ExternalDataManager(inventoryItems, this.config.getCacheRefreshTime(), jpAccessor,
                         amazonAccessor);
@@ -700,7 +709,8 @@ public class RepriceWorker implements Runnable {
                                 }
 
                                 if (reprice) {
-                                    if (region.equals("JP") || region.equals("N-JP")) {
+                                    if (region.equals("JP") || region.equals("N-JP") || region.equals("JP-1")
+                                            || region.equals("N-JP-1")) {
                                         String productType = dataManager.getProductType(productId);
                                         if ("book".equalsIgnoreCase(productType) && (item.isUsed() || item.isOBI())) {
                                             Float lowestNewPrice = dataManager.getLowestAmazonPrice(productId,
@@ -709,7 +719,8 @@ public class RepriceWorker implements Runnable {
                                                 if (price > lowestNewPrice) {
                                                     quantity = 0;
                                                     quantityReset = true;
-                                                    auditTrail.append("\nBook price > " + lowestNewPrice + ", set Q = 0.");
+                                                    auditTrail.append("\nBook price > " + lowestNewPrice
+                                                            + ", set Q = 0.");
                                                 }
                                             }
                                         }

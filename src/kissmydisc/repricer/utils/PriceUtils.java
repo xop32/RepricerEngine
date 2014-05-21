@@ -25,7 +25,7 @@ public class PriceUtils {
     public static String getPrice(float price, String region) {
         if (price > 0.0) {
             String priceInStr = price + "";
-            if (region.equals("JP")) {
+            if (region.equals("JP") || region.equals("JP-1")) {
                 priceInStr = round(price) + "";
                 int index = priceInStr.indexOf(".");
                 if (index == -1) {

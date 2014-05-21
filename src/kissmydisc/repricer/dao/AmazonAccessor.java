@@ -175,6 +175,9 @@ public class AmazonAccessor {
         if (region.startsWith("N-")) {
             region = region.substring(2, region.length());
         }
+        if (region.equals("JP-1") || region.equals("N-JP-1")) {
+            region = "JP";
+        }
         productService = PRODUCT_SERVICE_MAP.get(region);
         feedsService = FEEDS_SERVICE_MAP.get(region);
         this.marketplaceId = marketplaceId;
@@ -575,8 +578,8 @@ public class AmazonAccessor {
         return weightMap;
     }
 
-    public Map<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> getProductDetailsByASIN(List<String> productIds,
-            boolean onlyPrice) throws Exception {
+    public Map<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> getProductDetailsByASIN(
+            List<String> productIds, boolean onlyPrice) throws Exception {
         if (AppConfig.getBoolean("ShouldNotGetLowestPriceFromAmazon", false)) {
             Map<String, Pair<Integer, Map<String, Pair<Float, Integer>>>> testMap = new HashMap<String, Pair<Integer, Map<String, Pair<Float, Integer>>>>();
             for (String key : productIds) {
@@ -650,7 +653,7 @@ public class AmazonAccessor {
         } else {
             log.warn("GetLowestOfferListings is null for " + productIds);
         }
-        int salesRankContent  = -1;
+        int salesRankContent = -1;
         if (response != null) {
             for (GetCompetitivePricingForASINResult result : response.getGetCompetitivePricingForASINResult()) {
                 if (result.isSetStatus()) {
@@ -669,9 +672,12 @@ public class AmazonAccessor {
                                         BigDecimal amount = moneyType.getAmount();
                                         price = amount.floatValue();
                                         if (!lowestPriceMap.containsKey(asin)) {
-                                            lowestPriceMap.put(asin, new Pair<Integer, Map<String, Pair<Float, Integer>>>(-1, new HashMap<String, Pair<Float, Integer>>()));
+                                            lowestPriceMap.put(asin,
+                                                    new Pair<Integer, Map<String, Pair<Float, Integer>>>(-1,
+                                                            new HashMap<String, Pair<Float, Integer>>()));
                                         }
-                                        Map<String, Pair<Float, Integer>> priceQtyMap = lowestPriceMap.get(asin).getSecond();
+                                        Map<String, Pair<Float, Integer>> priceQtyMap = lowestPriceMap.get(asin)
+                                                .getSecond();
                                         if (!priceQtyMap.containsKey(compPrice.getCondition())) {
                                             priceQtyMap.put(compPrice.getCondition(), new Pair<Float, Integer>(price,
                                                     -1));
@@ -696,9 +702,11 @@ public class AmazonAccessor {
                                     String condition = offerListing.getCondition();
                                     quantity = offerListing.getValue();
                                     if (!lowestPriceMap.containsKey(asin)) {
-                                        lowestPriceMap.put(asin, new Pair<Integer, Map<String, Pair<Float, Integer>>>(-1, new  HashMap<String, Pair<Float, Integer>>()));
+                                        lowestPriceMap.put(asin, new Pair<Integer, Map<String, Pair<Float, Integer>>>(
+                                                -1, new HashMap<String, Pair<Float, Integer>>()));
                                     }
-                                    Map<String, Pair<Float, Integer>> priceQtyMap = lowestPriceMap.get(asin).getSecond();
+                                    Map<String, Pair<Float, Integer>> priceQtyMap = lowestPriceMap.get(asin)
+                                            .getSecond();
                                     if (!priceQtyMap.containsKey(condition)) {
                                         priceQtyMap.put(condition, new Pair<Float, Integer>(-1F, quantity));
                                     } else {
@@ -717,14 +725,16 @@ public class AmazonAccessor {
                                             salesRankContent = salesRank.getRank();
                                         } else if (salesRank.getProductCategoryId().equals("dvd_display_on_website")) {
                                             salesRankContent = salesRank.getRank();
-                                        } else if (salesRank.getProductCategoryId().equals("video_games_display_on_website")) {
+                                        } else if (salesRank.getProductCategoryId().equals(
+                                                "video_games_display_on_website")) {
                                             salesRankContent = salesRank.getRank();
                                         } else if (salesRank.getProductCategoryId().equals("book_display_on_website")) {
                                             salesRankContent = salesRank.getRank();
                                         }
                                     }
                                     if (!lowestPriceMap.containsKey(asin)) {
-                                        lowestPriceMap.put(asin, new Pair<Integer, Map<String, Pair<Float, Integer>>>(-1, new  HashMap<String, Pair<Float, Integer>>()));
+                                        lowestPriceMap.put(asin, new Pair<Integer, Map<String, Pair<Float, Integer>>>(
+                                                -1, new HashMap<String, Pair<Float, Integer>>()));
                                     }
                                     lowestPriceMap.get(asin).setFirst(salesRankContent);
                                 }
@@ -754,7 +764,8 @@ public class AmazonAccessor {
                     boolean newItems = false;
                     boolean scannedAll = true;
                     if (!lowestPriceMap.containsKey(asin)) {
-                        lowestPriceMap.put(asin, new Pair<Integer, Map<String, Pair<Float, Integer>>>(-1, new HashMap<String, Pair<Float, Integer>>()));
+                        lowestPriceMap.put(asin, new Pair<Integer, Map<String, Pair<Float, Integer>>>(-1,
+                                new HashMap<String, Pair<Float, Integer>>()));
                     }
                     if (result.isSetAllOfferListingsConsidered()) {
                         scannedAll = result.isAllOfferListingsConsidered();
@@ -775,7 +786,8 @@ public class AmazonAccessor {
                                                 Float price = moneyType.getAmount().floatValue();
                                                 if (!lowestPriceMap.containsKey(asin)) {
                                                     lowestPriceMap.put(asin,
-                                                            new Pair<Integer, Map<String, Pair<Float, Integer>>>(-1, new HashMap<String, Pair<Float, Integer>>()));
+                                                            new Pair<Integer, Map<String, Pair<Float, Integer>>>(-1,
+                                                                    new HashMap<String, Pair<Float, Integer>>()));
                                                 }
                                                 Map<String, Pair<Float, Integer>> priceQtyMap = lowestPriceMap
                                                         .get(asin).getSecond();

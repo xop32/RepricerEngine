@@ -117,7 +117,7 @@ public class ListingCopier {
                         pqFeed.setPrice(item.getPrice());
                         pqFeed.setQuantity(item.getQuantity());
                         if (item.getQuantity() == 0) {
-                            if ("JP".equals(toRegion)) {
+                            if ("JP-1".equals(toRegion) || "JP".equals(toRegion)) {
                                 pqFeed.setPrice(20000.0F);
                             } else {
                                 pqFeed.setPrice(999.0F);
@@ -236,7 +236,7 @@ public class ListingCopier {
             byteWritten += header.length;
         }
         String charset = "UTF-8";
-        if (toRegion.equals("JP")) {
+        if (toRegion.equals("JP") || toRegion.equals("JP-1")) {
             charset = "Shift_JIS";
         }
         for (InventoryFeedItem item : items) {
@@ -260,7 +260,7 @@ public class ListingCopier {
                 }
                 if (param.equals("price")) {
                     float price = item.getPrice();
-                    if (toRegion.equals("JP") && item.getQuantity() == 0) {
+                    if ((toRegion.equals("JP-1") || toRegion.equals("JP")) && item.getQuantity() == 0) {
                         price = 197000.0F; // logic should be revisited
                     }
                     listing += PriceUtils.getPrice(price, toRegion) + TAB;

@@ -5,6 +5,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -12,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 import kissmydisc.repricer.model.ProductDetails;
+import kissmydisc.repricer.model.ProductStat;
 
 public class ProductDAO extends DBAccessor {
 
@@ -276,6 +278,29 @@ public class ProductDAO extends DBAccessor {
         }
     }
 
+    public void addProductStats(List<ProductStat> stats) throws DBException {
+        String query = "insert into product_stats (PRODUCT_ID, SALES_RANK) values (?, ?) ";
+        PreparedStatement st = null;
+        Connection conn = null;
+        try {
+            conn = getConnection();
+            st = conn.prepareStatement(query);
+            for (ProductStat stat : stats) {
+                int index = 1;
+                st.setString(index++, stat.getProductId());
+                st.setInt(index++, stat.getSalesRank());
+                st.addBatch();
+            }
+            st.executeBatch();
+        } catch (SQLException e) {
+            throw new DBException(e);
+        } finally {
+            releaseStatement(st);
+            releaseConnection();
+        }
+
+    }
+
     public void updateProductPriceQuantityData(List<ProductDetails> productDetails) throws DBException {
         String query = "insert into product_details (PRODUCT_ID, NEW_LOWEST_PRICE, NEW_QUANTITY, USED_LOWEST_PRICE, USED_QUANTITY, SALES_RANK, LAST_REFRESHED) values (?, ?, ?, ?, ?, ?, ? ) ON DUPLICATE KEY UPDATE ";
         query += " NEW_LOWEST_PRICE = values(NEW_LOWEST_PRICE), NEW_QUANTITY = values(NEW_QUANTITY), USED_QUANTITY = values(USED_QUANTITY), USED_LOWEST_PRICE = values(USED_LOWEST_PRICE), LAST_REFRESHED = values(LAST_REFRESHED), SALES_RANK = values(SALES_RANK) ";
@@ -303,6 +328,35 @@ public class ProductDAO extends DBAccessor {
         } catch (SQLException e) {
             throw new DBException(e);
         } finally {
+            releaseStatement(st);
+            releaseConnection();
+        }
+    }
+
+    public List<ProductStat> getProductStats(String productId) throws DBException {
+        String query = "select * from product_stats where product_id = ? and unix_timestamp(now() - interval 60 day) ";
+        List<ProductStat> stats = new ArrayList<ProductStat>();
+        PreparedStatement st = null;
+        Connection conn = null;
+        ResultSet rs = null;
+        try {
+            conn = getConnection();
+            st = conn.prepareStatement(query);
+            st.setString(1, productId);
+            rs = st.executeQuery();
+            while (rs.next()) {
+                String prodId = rs.getString("PRODUCT_ID");
+                int salesRank = rs.getInt("SALES_RANK");
+                ProductStat details = new ProductStat();
+                details.setProductId(prodId);
+                details.setSalesRank(salesRank);
+                stats.add(details);
+            }
+            return stats;
+        } catch (SQLException e) {
+            throw new DBException(e);
+        } finally {
+            releaseResultSet(rs);
             releaseStatement(st);
             releaseConnection();
         }
