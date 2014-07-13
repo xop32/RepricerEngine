@@ -7,6 +7,7 @@ import org.apache.log4j.PropertyConfigurator;
 import kissmydisc.repricer.command.Command;
 import kissmydisc.repricer.command.CommandManager;
 import kissmydisc.repricer.dao.AmazonAccessor;
+import kissmydisc.repricer.dao.RepricerStatusDAO;
 import kissmydisc.repricer.engine.PeriodicRepriceScheduler;
 import kissmydisc.repricer.utils.AppConfig;
 
@@ -20,6 +21,11 @@ public class RepricerMain {
         AmazonAccessor.initialize();
         log = LogFactory.getLog(RepricerMain.class);
         log.info("Process started.");
+        try {
+            new RepricerStatusDAO().cancelRunning();
+        } catch (Exception e) {
+            log.info("Unable to cancel repricer.");
+        }
         CommandManager commandManager = new CommandManager();
         PeriodicRepriceScheduler scheduler = new PeriodicRepriceScheduler();
         Thread periodicScheduler = new Thread(scheduler);
