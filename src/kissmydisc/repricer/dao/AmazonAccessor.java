@@ -135,7 +135,7 @@ public class AmazonAccessor {
         String accessKey = properties.getProperty(region + "_ACCESS_KEY");
         String secretKey = properties.getProperty(region + "_SECRET_KEY");
         if (async == false) {
-            return new MarketplaceWebServiceProductsClient(accessKey, secretKey, "SimplyReliableRepricer", "1.0",
+            return new MarketplaceWebServiceProductsClient(accessKey, secretKey, "NipponRepricer", "1.0",
                     getConfig(region));
         } else {
             return null;

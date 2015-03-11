@@ -192,7 +192,7 @@ public class CreateListingsWorker {
             item.setObiItem(false);
             float price = 20000.0F;
             if (!region.equals("JP")) {
-                price = 999.0F;
+                price = 19.95F;
             }
             item.setPrice(price);
             item.setQuantity(0);

@@ -105,13 +105,13 @@ public class ListingCopier {
                         item.setInventoryId(toInventoryId);
                         String sku = item.getSku();
                         if (item.getCondition() == 11) {
-                            sku = id++ + "-N" + toRegion;
+                            sku = "N-" + id++ + "-N" + toRegion;
                         }
                         if (item.getCondition() < 11) {
                             if (item.getObiItem()) {
-                                sku = id++ + "-O" + toRegion;
+                                sku = "S-" + id++ + "-O" + toRegion;
                             } else {
-                                sku = id++ + "-U" + toRegion;
+                                sku = "S-" + id++ + "-U" + toRegion;
                             }
                         }
                         pqFeed.setPrice(item.getPrice());
@@ -120,7 +120,7 @@ public class ListingCopier {
                             if ("JP-1".equals(toRegion) || "JP".equals(toRegion)) {
                                 pqFeed.setPrice(20000.0F);
                             } else {
-                                pqFeed.setPrice(999.0F);
+                                pqFeed.setPrice(19.95F);
                             }
                             quantityZero.add(pqFeed);
                         }
@@ -144,23 +144,25 @@ public class ListingCopier {
                 }
             } while (moreToken != null);
         } finally {
-            if (dos != null) {
-                byte[] md5 = dos.getMessageDigest().digest();
-                dos.flush();
-                dos.close();
-                byteWritten = 0;
-                dos = null;
-                submitToAmazon(feedFile, md5);
-            }
-            if (pqFileStream != null) {
-                pqFileStream.flush();
-                byte[] md5 = pqFileStream.getMessageDigest().digest();
-                pqFileStream.close();
-                rowsWritten = 0;
-                pqFileStream = null;
-                pqFiles.add(new Pair<String, String>(pqFeedFile, new String(Base64.encodeBase64(md5), "UTF-8")));
-            }
-            submitToAmazon();
+        	if (totalItems > 0) {
+	            if (dos != null) {
+	                byte[] md5 = dos.getMessageDigest().digest();
+	                dos.flush();
+	                dos.close();
+	                byteWritten = 0;
+	                dos = null;
+	                submitToAmazon(feedFile, md5);
+	            }
+	            if (pqFileStream != null) {
+	                pqFileStream.flush();
+	                byte[] md5 = pqFileStream.getMessageDigest().digest();
+	                pqFileStream.close();
+	                rowsWritten = 0;
+	                pqFileStream = null;
+	                pqFiles.add(new Pair<String, String>(pqFeedFile, new String(Base64.encodeBase64(md5), "UTF-8")));
+	            }
+	            submitToAmazon();
+        	}
         }
     }
 

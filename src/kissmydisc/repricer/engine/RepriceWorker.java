@@ -546,25 +546,7 @@ public class RepriceWorker implements Runnable {
                                 qtyLimit = config.getFormula().getNewQuantityLimit();
                             }
 
-                            if (reprice && ajpQuantity >= 0 && ajpQuantity < qtyLimit) {
-                                reprice = false;
-                                quantity = 0;
-                                quantityReset = true;
-                                if ("KMD".equals(region)) {
-                                    if (ajpQuantity == 0) {
-                                        price = 22.22F;
-                                    }
-                                }
-                                auditTrail.append("Applying Quantity Filter - Ajp Q:" + ajpQuantity
-                                        + ", Not Repricing.");
-                                if (log.isDebugEnabled()) {
-                                    log.debug("Applying quantity filter for " + item);
-                                }
-                            } else if (!item.getRegion().equals("JP") && reprice && ajpQuantity >= qtyLimit
-                                    && currentQuantity == 0) {
-                                quantity = 1;
-                            }
-
+                            Float lowestPriceInAmazon = null;
                             if (reprice) {
                                 auditTrail.append("Q(A.jp): ").append(ajpQuantity + "\n");
                                 if (log.isDebugEnabled()) {
@@ -630,10 +612,16 @@ public class RepriceWorker implements Runnable {
                                     quantity = item.getQuantity();
                                     auditTrail.append("Not repricing.");
                                 }
-
+                                
+                                Float lowestRegionalPrice;
+                                /*if (!"JP".equals(region)) {
+                                	lowestRegionalPrice = dataManager.getLowestRegionalPrice(item.getSku());
+                                	lowestPriceInAmazon = lowestRegionalPrice;
+                                }*/
                                 // Second level repricing..
                                 if (reprice && !item.getObiItem() && config.getFormula().isSecondLevelRepricing()) {
-                                    Float lowestRegionalPrice = dataManager.getLowestRegionalPrice(item.getSku());
+                                    lowestRegionalPrice = dataManager.getLowestRegionalPrice(item.getSku());
+                                    lowestPriceInAmazon = lowestRegionalPrice;
                                     if (lowestRegionalPrice != null && lowestRegionalPrice > 0) {
                                         RepricerFormula f = config.getFormula();
                                         if (price < lowestRegionalPrice) {
@@ -688,24 +676,34 @@ public class RepriceWorker implements Runnable {
                                 }
 
                                 if (reprice) {
-                                    int upperLimitPrice = -1;
+                                    int upperPriceLimitPercentage = -1;
                                     if (item.isNew()) {
-                                        upperLimitPrice = this.config.getFormula().getPriceLimitNew();
+                                        upperPriceLimitPercentage = this.config.getFormula().getPriceLimitNew();
                                     } else if (item.isUsed()) {
-                                        upperLimitPrice = this.config.getFormula().getPriceLimitUsed();
+                                        upperPriceLimitPercentage = this.config.getFormula().getPriceLimitUsed();
                                     } else if (item.isOBI()) {
-                                        upperLimitPrice = this.config.getFormula().getPriceLimitUsedOBI();
+                                        upperPriceLimitPercentage = this.config.getFormula().getPriceLimitUsedOBI();
                                     }
-                                    if (upperLimitPrice > 0 && price > upperLimitPrice) {
+                                    if (lowestPriceInAmazon != null && lowestPriceInAmazon > 0 && upperPriceLimitPercentage > 0) {
+                                    	if (price > (lowestPriceInAmazon * upperPriceLimitPercentage/100.0)) {
+                                    		quantity = 0;
+                                    		quantityReset = true;
+                                    		reprice = false;
+                                    		price = (lowestPriceInAmazon * 2.0);
+                                    		auditTrail.append("\nP > (LAP * " + upperPriceLimitPercentage + "/100), Q=0, LAPinA: " + lowestPriceInAmazon);
+                                    	}
+                                    }
+                                    /*
+                                     * if (upperPriceLimitPercentage > 0 && price > upperPriceLimitPercentage) {
                                         quantity = 0;
                                         if (region.equals("KMD")) {
                                             price = 22.22F;
                                         } else {
-                                            price = upperLimitPrice;
+                                            price = upperPriceLimitPercentage;
                                         }
                                         quantityReset = true;
-                                        auditTrail.append("\nP > " + upperLimitPrice + ", set Q = 0.");
-                                    }
+                                        auditTrail.append("\nP > " + upperPriceLimitPercentage + ", set Q = 0.");
+                                    } */
                                 }
 
                                 if (reprice) {
@@ -718,6 +716,7 @@ public class RepriceWorker implements Runnable {
                                             if (lowestNewPrice != null && lowestNewPrice > 0) {
                                                 if (price > lowestNewPrice) {
                                                     quantity = 0;
+                                                    reprice = false;
                                                     quantityReset = true;
                                                     auditTrail.append("\nBook price > " + lowestNewPrice
                                                             + ", set Q = 0.");
@@ -725,6 +724,29 @@ public class RepriceWorker implements Runnable {
                                             }
                                         }
                                     }
+                                }
+                                
+                                if (reprice && ajpQuantity >= 0 && ajpQuantity < qtyLimit) {
+                                    reprice = false;
+                                    quantity = 0;
+                                    quantityReset = true;
+                                    if ("KMD".equals(region)) {
+                                        if (ajpQuantity == 0) {
+                                            price = 22.22F;
+                                        }
+                                    }
+                                    auditTrail.append("Applying Quantity Filter - Ajp Q:" + ajpQuantity
+                                            + ", Not Repricing.");
+                                    if (log.isDebugEnabled()) {
+                                        log.debug("Applying quantity filter for " + item);
+                                    }
+                                } else if (reprice && ajpQuantity >= qtyLimit
+                                        && currentQuantity == 0) {
+                                    quantity = 1;
+                                } else if (reprice && ajpQuantity < 0) {
+                                	quantity = 0;
+                                	quantityReset = true;
+                                	reprice = false;
                                 }
 
                                 feed.setPrice((float) price);
@@ -864,3 +886,4 @@ public class RepriceWorker implements Runnable {
     }
 
 }
+
